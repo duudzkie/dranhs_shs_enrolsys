@@ -1,0 +1,33 @@
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+
+# Env files
+.env
+.env.*
+
+# Composer
+/vendor/
+
+# PHP
+*.phar
+*.sqlite
+*.db
+
+# XAMPP / local server
+# (Add any local-only files you don’t want tracked)
+
