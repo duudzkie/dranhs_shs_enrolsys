@@ -13,5 +13,10 @@
         <button id="btn-start-enroll" class="bg-dranhs-green hover:bg-emerald-700 text-white border-none py-3.5 px-8 lg:py-4 lg:px-10 rounded-full font-bold text-base lg:text-lg cursor-pointer inline-flex items-center gap-3 transition-all duration-300 shadow-lg hover:shadow-xl hover:-translate-y-1 w-full max-w-sm mx-auto justify-center uppercase tracking-wide">
             OFFICIAL ENROLLMENT
         </button>
+        <noscript>
+            <p class="text-sm font-medium text-red-600 mt-4">
+                JavaScript is required for the modal. <a href="enrollment_form_g11.php" class="underline">Click here to enroll</a>.
+            </p>
+        </noscript>
     </div>
 </main>
