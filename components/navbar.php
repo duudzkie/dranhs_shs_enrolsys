@@ -1,3 +1,9 @@
+<?php
+if (session_status() === PHP_SESSION_NONE) session_start();
+$loggedIn = !empty($_SESSION['logged_in']);
+$username = $_SESSION['username'] ?? '';
+?>
+
 <!-- Top Navbar (components/navbar.php) -->
 <nav class="w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800 py-3 px-4 lg:px-8 z-40 flex flex-col lg:flex-row justify-between items-center gap-3 lg:gap-0 fixed top-0 left-0 shadow-sm transition-colors duration-300">
     <a href="index.php" class="flex items-center gap-4 w-full justify-start lg:w-auto hover:opacity-80 transition-opacity">
@@ -31,10 +37,17 @@
             </svg>
         </button>
 
-        <form class="flex flex-row items-center gap-2 w-full max-w-md lg:w-auto lg:max-w-none" action="#" method="POST" onsubmit="event.preventDefault()">
-            <input type="text" name="username" placeholder="Username" required class="w-1/3 lg:w-[150px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 lg:px-4 rounded-full text-slate-800 dark:text-white text-sm outline-none transition-all focus:border-dranhs-green dark:focus:border-emerald-500 focus:ring-2 focus:ring-dranhs-green/20 placeholder-slate-400 dark:placeholder-slate-500 font-medium shadow-sm">
-            <input type="password" name="password" placeholder="Password" required class="w-1/3 lg:w-[150px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 lg:px-4 rounded-full text-slate-800 dark:text-white text-sm outline-none transition-all focus:border-dranhs-green dark:focus:border-emerald-500 focus:ring-2 focus:ring-dranhs-green/20 placeholder-slate-400 dark:placeholder-slate-500 font-medium shadow-sm">
-            <button type="submit" class="flex-1 lg:flex-none bg-dranhs-green hover:bg-emerald-700 text-white border-none px-4 py-2 rounded-full font-bold text-sm cursor-pointer transition-transform shadow-md hover:-translate-y-0.5 whitespace-nowrap text-center">LOGIN</button>
-        </form>
+        <?php if (!$loggedIn): ?>
+            <form class="flex flex-row items-center gap-2 w-full max-w-md lg:w-auto lg:max-w-none" action="admin.php" method="POST">
+                <input type="text" name="username" placeholder="Username" required class="w-1/3 lg:w-[150px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 lg:px-4 rounded-full text-slate-800 dark:text-white text-sm outline-none transition-all focus:border-dranhs-green dark:focus:border-emerald-500 focus:ring-2 focus:ring-dranhs-green/20 placeholder-slate-400 dark:placeholder-slate-500 font-medium shadow-sm">
+                <input type="password" name="password" placeholder="Password" required class="w-1/3 lg:w-[150px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 lg:px-4 rounded-full text-slate-800 dark:text-white text-sm outline-none transition-all focus:border-dranhs-green dark:focus:border-emerald-500 focus:ring-2 focus:ring-dranhs-green/20 placeholder-slate-400 dark:placeholder-slate-500 font-medium shadow-sm">
+                <button type="submit" class="flex-1 lg:flex-none bg-dranhs-green hover:bg-emerald-700 text-white border-none px-4 py-2 rounded-full font-bold text-sm cursor-pointer transition-transform shadow-md hover:-translate-y-0.5 whitespace-nowrap text-center">LOGIN</button>
+            </form>
+        <?php else: ?>
+            <div class="flex items-center gap-3">
+                <span class="text-sm font-bold text-slate-700">Hello, <?= htmlspecialchars($username) ?></span>
+                <a href="logout.php" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-full text-sm font-bold transition-colors">Logout</a>
+            </div>
+        <?php endif; ?>
     </div>
 </nav>

@@ -279,5 +279,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 contentAcademic.classList.add('hidden');
             });
         }
-    }
+
+    // -------------------------------------------------------------------------
+    // Admin Login Modal Logic
+    // -------------------------------------------------------------------------
+    // Try to find a login button in the navbar (assuming ID 'btn-open-login' or text match)
+    const openLoginBtn = document.getElementById('btn-open-login') || 
+                         Array.from(document.querySelectorAll('a, button')).find(el => el.textContent.toLowerCase().includes('login'));
+
+    if(openLoginBtn) openLoginBtn.addEventListener('click', (e) => { 
+        e.preventDefault(); 
+        window.location.href = 'admin.php'; 
+    });
 });
