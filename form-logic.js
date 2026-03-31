@@ -38,10 +38,13 @@ function initFormLogic(themeColor) {
         birthdateInput.addEventListener('change', function() {
             const birthDate = new Date(this.value);
             if (!isNaN(birthDate)) {
-                const today = new Date();
-                let age = today.getFullYear() - birthDate.getFullYear();
-                const m = today.getMonth() - birthDate.getMonth();
-                if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+                let referenceDate = new Date();
+                if (typeof SYSTEM_PHASE_START_DATE !== 'undefined' && SYSTEM_PHASE_START_DATE) {
+                    referenceDate = new Date(SYSTEM_PHASE_START_DATE);
+                }
+                let age = referenceDate.getFullYear() - birthDate.getFullYear();
+                const m = referenceDate.getMonth() - birthDate.getMonth();
+                if (m < 0 || (m === 0 && referenceDate.getDate() < birthDate.getDate())) {
                     age--;
                 }
                 ageInput.value = age >= 0 ? age : 0;

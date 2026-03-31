@@ -1,5 +1,22 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
+
+$db_host = 'localhost';
+$db_user = 'root';
+$db_pass = '';
+$db_name = 'dranhswin';
+$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
+
+$enrollment_locked = false;
+if (!$conn->connect_error) {
+    $res = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'enrollment_status'");
+    if ($res && $res->num_rows > 0) {
+        $row = $res->fetch_assoc();
+        if ($row['setting_value'] === 'locked') {
+            $enrollment_locked = true;
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -62,6 +79,6 @@ if (session_status() === PHP_SESSION_NONE) session_start();
     <!-- Include Enrollment Modal -->
     <?php include 'components/enroll_modal.php'; ?>
 
-    <script src="script.js"></script>
+    <script src="script.js?v=<?php echo time(); ?>"></script>
 </body>
 </html>
