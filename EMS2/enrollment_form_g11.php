@@ -1,3 +1,25 @@
+<?php
+$db_host = 'localhost';
+$db_user = 'root';
+$db_pass = '';
+$db_name = 'dranhswin';
+$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
+
+$school_year = '2026 - 2027';
+$semester = '1st';
+$phase_start_date = date('Y-m-d'); 
+
+if (!$conn->connect_error) {
+    $res = $conn->query("SELECT setting_key, setting_value FROM system_settings");
+    if ($res) {
+        while ($row = $res->fetch_assoc()) {
+            if ($row['setting_key'] === 'academic_year') $school_year = $row['setting_value'];
+            if ($row['setting_key'] === 'active_semester') $semester = $row['setting_value'];
+            if ($row['setting_key'] === 'phase_start_date') $phase_start_date = $row['setting_value'];
+        }
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -21,6 +43,10 @@
                 }
             }
         }
+    </script>
+    <script>
+        // Settings injected from backend
+        const SYSTEM_PHASE_START_DATE = '<?php echo $phase_start_date; ?>';
     </script>
     <style type="text/tailwindcss">
         .form-section { @apply bg-white rounded-2xl shadow-sm border border-slate-200 p-6 lg:p-8 mb-6 relative overflow-hidden; }
@@ -69,7 +95,7 @@
                 <div class="mb-8 border-b border-slate-100 pb-6">
                     <div class="form-group w-full md:w-1/2 lg:w-1/3">
                         <label class="form-label">Learner Category</label>
-                        <select name="student_type" class="form-input" required>
+                        <select name="student_type" id="student-type" class="form-input" required>
                             <option value="">Select Category...</option>
                             <option value="Grade 10 DRANHS Student">Grade 10 DRANHS Student</option>
                             <option value="Transferee">Transferee</option>
@@ -443,8 +469,22 @@
             
             const trackSelect = document.getElementById('g11-track');
             const pathwaySelect = document.getElementById('g11-pathway');
+            const studentTypeSelect = document.getElementById('student-type');
 
-            if(track) trackSelect.value = track;
+            if(track) {
+                trackSelect.value = track;
+                if (studentTypeSelect) {
+                    if (track === 'ALS') {
+                        studentTypeSelect.innerHTML = '<option value="ALS" selected>ALS (Alternative Learning System)</option>';
+                        studentTypeSelect.style.pointerEvents = 'none';
+                        studentTypeSelect.classList.add('bg-slate-100', 'text-slate-600', 'border-slate-300');
+                    } else {
+                        Array.from(studentTypeSelect.options).forEach(opt => {
+                            if (opt.value === 'ALS') opt.remove();
+                        });
+                    }
+                }
+            }
             if(pathway) pathwaySelect.value = pathway;
 
             // Form specific Logic
