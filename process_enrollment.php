@@ -1,0 +1,231 @@
+<?php
+// process_enrollment.php - Handle enrollment form submission with image upload and compression
+
+require_once __DIR__ . '/pathway_strand_catalog.php';
+
+$db_host = 'localhost';
+$db_user = 'root';
+$db_pass = '';
+$db_name = 'dranhswin';
+$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
+
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+function post_value($key, $default = null) {
+    return isset($_POST[$key]) ? $_POST[$key] : $default;
+}
+
+// Function to compress and resize image
+function compressImage($source, $destination, $quality = 80, $maxWidth = 800, $maxHeight = 800) {
+    $info = getimagesize($source);
+    if (!$info) return false;
+
+    $mime = $info['mime'];
+    switch ($mime) {
+        case 'image/jpeg':
+            $image = imagecreatefromjpeg($source);
+            break;
+        case 'image/png':
+            $image = imagecreatefrompng($source);
+            break;
+        case 'image/webp':
+            $image = imagecreatefromwebp($source);
+            break;
+        default:
+            return false;
+    }
+
+    // Get original dimensions
+    $width = imagesx($image);
+    $height = imagesy($image);
+
+    // Calculate new dimensions
+    if ($width > $height) {
+        if ($width > $maxWidth) {
+            $newWidth = $maxWidth;
+            $newHeight = ($height / $width) * $maxWidth;
+        } else {
+            $newWidth = $width;
+            $newHeight = $height;
+        }
+    } else {
+        if ($height > $maxHeight) {
+            $newHeight = $maxHeight;
+            $newWidth = ($width / $height) * $maxHeight;
+        } else {
+            $newWidth = $width;
+            $newHeight = $height;
+        }
+    }
+
+    // Create new image
+    $newImage = imagecreatetruecolor($newWidth, $newHeight);
+
+    // Preserve transparency for PNG
+    if ($mime == 'image/png') {
+        imagealphablending($newImage, false);
+        imagesavealpha($newImage, true);
+        $transparent = imagecolorallocatealpha($newImage, 255, 255, 255, 127);
+        imagefill($newImage, 0, 0, $transparent);
+    }
+
+    // Resize
+    imagecopyresampled($newImage, $image, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
+
+    // Save compressed image
+    $success = false;
+    if ($mime == 'image/jpeg') {
+        $success = imagejpeg($newImage, $destination, $quality);
+    } elseif ($mime == 'image/png') {
+        $success = imagepng($newImage, $destination, 9 - round($quality / 10)); // PNG quality is 0-9, lower is better
+    } elseif ($mime == 'image/webp') {
+        $success = imagewebp($newImage, $destination, $quality);
+    }
+
+    // Clean up memory
+    imagedestroy($image);
+    imagedestroy($newImage);
+
+    return $success;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    session_start();
+
+    // Validate required fields (add more as needed)
+    $required = ['last_name', 'first_name', 'birthdate', 'sex', 'place_of_birth', 'lrn'];
+    foreach ($required as $field) {
+        if (empty($_POST[$field])) {
+            die("Error: $field is required");
+        }
+    }
+
+    // LRN should be exactly 12 digits
+    if (!preg_match('/^[0-9]{12}$/', $_POST['lrn'])) {
+        die("Error: LRN must be 12 digits.");
+    }
+
+    // No student photo upload required
+    $avatarPath = null;
+
+    // Check if LRN already exists
+    $lrn_check = $conn->prepare("SELECT id FROM students WHERE lrn = ?");
+    $lrn_check->bind_param("s", $_POST['lrn']);
+    $lrn_check->execute();
+    $lrn_check->store_result();
+    if ($lrn_check->num_rows > 0) {
+        die("Error: LRN already exists. Please use a unique Learner's Reference Number.");
+    }
+    $lrn_check->close();
+
+    // Normalize optional fields with defaults
+    $ip = post_value('ip', 'No');
+    $ip_specify = post_value('ip_specify', '');
+    $family_4ps = post_value('4ps', 'No');
+    $fps_id = post_value('fps_specify', '');
+    $sped = post_value('sped', 'No');
+    $sped_diagnosis = post_value('sped_diagnosis', '');
+    $pwd = post_value('pwd', 'No');
+    $pwd_id = post_value('pwd_id', '');
+
+    $grade_level = post_value('grade_level', '');
+
+    // Pathway/strand normalization (Grade 12 uses strand, Grade 11 uses pathway)
+    $track = post_value('track', '');
+    $pathway = post_value('pathway', '');
+    $strand = post_value('strand', '');
+    $selected_pathway_strand = strcasecmp($grade_level, 'Grade 12') === 0 ? $strand : $pathway;
+    $pathway_strand = get_pathway_strand_code($grade_level, $selected_pathway_strand);
+
+    // Prepare data for insertion (simplified - add all form fields)
+    $stmt = $conn->prepare("INSERT INTO students (
+        last_name, first_name, middle_name, extension_name, birthdate, age, sex, place_of_birth,
+        mother_tongue, religion, ip_community, ip_specify, family_4ps, fps_id,
+        father_last_name, father_first_name, father_middle_name, father_contact,
+        mother_last_name, mother_first_name, mother_middle_name, mother_contact,
+        guardian_last_name, guardian_first_name, guardian_middle_name, guardian_contact,
+        sped, sped_diagnosis, pwd, pwd_id,
+        semester, track, pathway_strand, school_year, grade_level, lrn, student_type,
+        height, weight, psa_birth_cert,
+        street, province, city, barangay, zip_code, living_with,
+        prev_school, prev_school_year, prev_section
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+
+    if (!$stmt) {
+        die("Prepare failed: " . $conn->error);
+    }
+
+    $params = [
+        $_POST['last_name'], $_POST['first_name'], post_value('middle_name', ''), post_value('extension_name', ''),
+        $_POST['birthdate'], post_value('age', null), $_POST['sex'], $_POST['place_of_birth'],
+        post_value('mother_tongue', ''), post_value('religion', ''), $ip, $ip_specify,
+        $family_4ps, $fps_id,
+        post_value('father_last_name', ''), post_value('father_first_name', ''), post_value('father_middle_name', ''), post_value('father_contact', ''),
+        post_value('mother_last_name', ''), post_value('mother_first_name', ''), post_value('mother_middle_name', ''), post_value('mother_contact', ''),
+        post_value('guardian_last_name', ''), post_value('guardian_first_name', ''), post_value('guardian_middle_name', ''), post_value('guardian_contact', ''),
+        $sped, $sped_diagnosis, $pwd, $pwd_id,
+        post_value('semester', ''), $track, $pathway_strand, post_value('school_year', ''), $grade_level,
+        $_POST['lrn'], post_value('student_type', ''), post_value('height', null), post_value('weight', null), post_value('psa_birth_cert', ''),
+        post_value('street', ''), post_value('province', ''), post_value('city', ''), post_value('barangay', ''),
+        post_value('zip_code', ''), post_value('living_with', ''),
+        post_value('prev_school', null), post_value('prev_school_year', null), post_value('prev_section', null)
+    ];
+
+    $types = str_repeat('s', count($params));
+    $stmt->bind_param($types, ...$params);
+
+    if ($stmt->execute()) {
+        $clean_lrn = htmlspecialchars($_POST['lrn']);
+        echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Enrollment Success</title><style>';
+        echo 'body{margin:0;font-family:Outfit,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:linear-gradient(135deg,#f8fafc 0%,#eef2ff 100%);color:#1f2937;}';
+        echo '.modal-wrap{min-height:100vh;display:flex;justify-content:center;align-items:center;padding:1.5rem;position:relative;overflow:hidden;}';
+        echo '.modal-wrap:before,.modal-wrap:after{content:"";position:absolute;border-radius:999px;filter:blur(18px);opacity:.6;}';
+        echo '.modal-wrap:before{width:260px;height:260px;background:#c4b5fd;top:-60px;left:-40px;}';
+        echo '.modal-wrap:after{width:220px;height:220px;background:#f9a8d4;bottom:-60px;right:-30px;}';
+        echo '.card{position:relative;z-index:1;max-width:620px;width:100%;background:rgba(255,255,255,.95);backdrop-filter:blur(8px);border-radius:24px;box-shadow:0 28px 60px rgba(15,23,42,.18);padding:2rem;border:1px solid rgba(226,232,240,.9);}';
+        echo '.tag{display:inline-flex;align-items:center;gap:.45rem;background:#dcfce7;color:#166534;padding:.4rem .8rem;border-radius:999px;font-size:.75rem;font-weight:800;margin-bottom:1rem;text-transform:uppercase;letter-spacing:.08em;}';
+        echo '.title{font-size:2rem;font-weight:900;color:#0f172a;margin:0 0 .8rem;}';
+        echo '.text{line-height:1.7;color:#475569;margin:.5rem 0 1rem;}';
+        echo '.strong{font-weight:800;color:#0f172a;}';
+        echo '.badge{display:inline-block;padding:.45rem .8rem;border-radius:.9rem;font-size:.95rem;background:#eef2ff;color:#5b21b6;font-weight:800;margin-top:.35rem;}';
+        echo '.actions{display:flex;flex-wrap:wrap;gap:.8rem;margin-top:1.4rem;}';
+        echo '.button{display:inline-flex;align-items:center;justify-content:center;padding:.9rem 1.2rem;font-weight:800;background:#111827;color:#fff;border:0;border-radius:.95rem;cursor:pointer;text-decoration:none;min-width:180px;}';
+        echo '.button-secondary{display:inline-flex;align-items:center;justify-content:center;padding:.9rem 1.2rem;font-weight:800;background:#f8fafc;color:#334155;border:1px solid #cbd5e1;border-radius:.95rem;cursor:not-allowed;text-decoration:none;min-width:180px;opacity:.75;}';
+        echo '.list{margin:.4rem 0 0 1.2rem;color:#475569;line-height:1.8;padding:0;}';
+        echo '</style></head><body>';
+        echo '<div class="modal-wrap">';
+        echo '<div class="card">';
+        echo '<div class="tag">Enrollment Success</div>';
+        echo '<h1 class="title">Enrollment submitted successfully</h1>';
+        echo '<p class="text">Your enrollment request has been saved in the system. Keep your LRN for future status checking and follow-up.</p>';
+        echo '<p class="text"><span class="strong">Learner Reference Number</span><br><span class="badge">' . $clean_lrn . '</span></p>';
+        echo '<p class="text">Please prepare these documents when needed:</p>';
+        echo '<ul class="list">';
+        echo '<li>School Card</li>';
+        echo '<li>PSA Birth Certificate</li>';
+        echo '<li>LRN for verification and status follow-up</li>';
+        echo '</ul>';
+        echo '<p class="text">The status checker is not connected yet, but the button is ready as a placeholder for your next step.</p>';
+        echo '<div class="actions">';
+        echo '<a href="index.php" class="button">Go to Landing Page</a>';
+        echo '<a href="#" class="button-secondary" onclick="return false;" aria-disabled="true">Check Status</a>';
+        echo '</div>';
+        echo '</div></div>';
+        echo '</body></html>';
+        $stmt->close();
+        $conn->close();
+        exit;
+    } else {
+        if ($conn->errno == 1062) {
+            die("Error: Duplicate LRN detected. LRN must be unique.");
+        }
+        die("Error: " . $stmt->error);
+    }
+
+    $stmt->close();
+}
+
+$conn->close();
+?>

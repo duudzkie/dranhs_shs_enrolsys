@@ -52,12 +52,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $room = $_POST['room'];
             
             // Clear prior assignments to this room
-            $clear = $conn->prepare("UPDATE registries SET room = NULL WHERE room = ?");
+            $clear = $conn->prepare("UPDATE add_sections SET room = NULL WHERE room = ?");
             $clear->bind_param("s", $room);
             $clear->execute();
             
             // Assign room to section
-            $stmt = $conn->prepare("UPDATE registries SET room = ? WHERE id = ?");
+            $stmt = $conn->prepare("UPDATE add_sections SET room = ? WHERE id = ?");
             $stmt->bind_param("si", $room, $section_id);
             $stmt->execute();
             $stmt->close();
@@ -70,51 +70,85 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $name = trim(strtoupper($_POST['name']));
             
             if (!empty($name)) {
-                $avatarVal = NULL;
-                
-                // Handle file upload if it's an adviser
-                if ($cat === 'faculty_advisers' && isset($_FILES['avatar']) && $_FILES['avatar']['error'] === UPLOAD_ERR_OK) {
-                    $tmp_name = $_FILES['avatar']['tmp_name'];
-                    $fname = basename($_FILES['avatar']['name']);
-                    // Generate unique filename
-                    $ext = strtolower(pathinfo($fname, PATHINFO_EXTENSION));
-                    if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp'])) {
-                        $new_fname = uniqid('adv_') . '.' . $ext;
-                        if (move_uploaded_file($tmp_name, $upload_dir . $new_fname)) {
-                            $avatarVal = 'uploads/advisers/' . $new_fname;
+                if ($cat === 'faculty_advisers') {
+                    $avatarVal = NULL;
+                    
+                    // Handle file upload for adviser
+                    if (isset($_FILES['avatar']) && $_FILES['avatar']['error'] === UPLOAD_ERR_OK) {
+                        $tmp_name = $_FILES['avatar']['tmp_name'];
+                        $fname = basename($_FILES['avatar']['name']);
+                        $ext = strtolower(pathinfo($fname, PATHINFO_EXTENSION));
+                        if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp'])) {
+                            $new_fname = uniqid('adv_') . '.' . $ext;
+                            if (move_uploaded_file($tmp_name, $upload_dir . $new_fname)) {
+                                $avatarVal = 'uploads/advisers/' . $new_fname;
+                            }
                         }
                     }
-                }
 
-                $stmt = $conn->prepare("INSERT INTO registries (category, name, avatar) VALUES (?, ?, ?)");
-                $stmt->bind_param("sss", $cat, $name, $avatarVal);
-                $stmt->execute();
-                $stmt->close();
-                $toast_message = 'Registry item added!';
-                $toast_type = 'success';
+                    $stmt = $conn->prepare("INSERT INTO advisers_accounts (name, avatar) VALUES (?, ?)");
+                    $stmt->bind_param("ss", $name, $avatarVal);
+                    $stmt->execute();
+                    $stmt->close();
+                    $toast_message = 'Adviser added!';
+                    $toast_type = 'success';
+                } else {
+                    // Handle sections (g10_sections, g11_sections or g12_sections)
+                    $grade_level = ($cat === 'g10_sections') ? '10' : (($cat === 'g11_sections') ? '11' : '12');
+                    
+                    // Check for duplicate section name in the same grade level
+                    $check_stmt = $conn->prepare("SELECT id FROM add_sections WHERE grade_level = ? AND name = ?");
+                    $check_stmt->bind_param("ss", $grade_level, $name);
+                    $check_stmt->execute();
+                    $check_result = $check_stmt->get_result();
+                    
+                    if ($check_result->num_rows > 0) {
+                        $toast_message = 'Section name "' . htmlspecialchars($name) . '" already exists for Grade ' . $grade_level . '!';
+                        $toast_type = 'error';
+                    } else {
+                        $stmt = $conn->prepare("INSERT INTO add_sections (grade_level, name) VALUES (?, ?)");
+                        $stmt->bind_param("ss", $grade_level, $name);
+                        $stmt->execute();
+                        $stmt->close();
+                        $toast_message = 'Section added!';
+                        $toast_type = 'success';
+                    }
+                    $check_stmt->close();
+                }
             }
         }
         elseif ($_POST['action'] === 'delete_registry') {
             $id = intval($_POST['id']);
+            $cat = $_POST['category'] ?? '';
             
-            // Optionally delete the physical file if it's an avatar
-            $q = $conn->prepare("SELECT avatar FROM registries WHERE id = ?");
-            $q->bind_param("i", $id);
-            $q->execute();
-            $r = $q->get_result();
-            if ($r && $row = $r->fetch_assoc()) {
-                if ($row['avatar'] && file_exists('../' . $row['avatar'])) {
-                    unlink('../' . $row['avatar']);
+            if ($cat === 'faculty_advisers') {
+                // Delete adviser from advisers_accounts
+                $q = $conn->prepare("SELECT avatar FROM advisers_accounts WHERE id = ?");
+                $q->bind_param("i", $id);
+                $q->execute();
+                $r = $q->get_result();
+                if ($r && $row = $r->fetch_assoc()) {
+                    if ($row['avatar'] && file_exists('../' . $row['avatar'])) {
+                        unlink('../' . $row['avatar']);
+                    }
                 }
-            }
-            $q->close();
+                $q->close();
 
-            $stmt = $conn->prepare("DELETE FROM registries WHERE id = ?");
-            $stmt->bind_param("i", $id);
-            $stmt->execute();
-            $stmt->close();
-            $toast_message = 'Item deleted.';
-            $toast_type = 'success';
+                $stmt = $conn->prepare("DELETE FROM advisers_accounts WHERE id = ?");
+                $stmt->bind_param("i", $id);
+                $stmt->execute();
+                $stmt->close();
+                $toast_message = 'Adviser deleted.';
+                $toast_type = 'success';
+            } else {
+                // Delete section from add_sections
+                $stmt = $conn->prepare("DELETE FROM add_sections WHERE id = ?");
+                $stmt->bind_param("i", $id);
+                $stmt->execute();
+                $stmt->close();
+                $toast_message = 'Section deleted.';
+                $toast_type = 'success';
+            }
         }
     }
 }
@@ -128,16 +162,31 @@ if ($res) {
     }
 }
 
-// Fetch Registries
+// Fetch Advisers and Sections
 $registries = [
     'faculty_advisers' => [],
+    'g10_sections' => [],
     'g11_sections' => [],
     'g12_sections' => []
 ];
-$r_res = $conn->query("SELECT id, category, name, avatar, room FROM registries ORDER BY name ASC");
-if ($r_res) {
-    while($r = $r_res->fetch_assoc()) {
-        $registries[$r['category']][] = $r;
+
+// Fetch advisers from advisers_accounts table
+$adv_res = $conn->query("SELECT id, name, avatar, created_at FROM advisers_accounts ORDER BY name ASC");
+if ($adv_res) {
+    while($r = $adv_res->fetch_assoc()) {
+        $r['category'] = 'faculty_advisers';
+        $registries['faculty_advisers'][] = $r;
+    }
+}
+
+// Fetch sections from add_sections table
+$sec_res = $conn->query("SELECT id, grade_level, name, room, created_at FROM add_sections ORDER BY name ASC");
+if ($sec_res) {
+    while($r = $sec_res->fetch_assoc()) {
+        $cat = ($r['grade_level'] === '10') ? 'g10_sections' : (($r['grade_level'] === '11') ? 'g11_sections' : 'g12_sections');
+        $r['category'] = $cat;
+        $r['avatar'] = NULL; // sections don't have avatars
+        $registries[$cat][] = $r;
     }
 }
 
@@ -155,7 +204,7 @@ function generateYearOptions($currentValue) {
 // Helper to check if a room is assigned and return details
 function getRoomAssignment($roomNumber, $registries) {
     // Check both arrays for the room
-    foreach(['g11_sections', 'g12_sections'] as $cat) {
+    foreach(['g10_sections', 'g11_sections', 'g12_sections'] as $cat) {
         foreach($registries[$cat] as $sec) {
             if ($sec['room'] == $roomNumber) return $sec;
         }
@@ -180,7 +229,7 @@ function getRoomAssignment($roomNumber, $registries) {
     <!-- Tabs Header -->
     <div class="flex overflow-x-auto border-b border-slate-100 bg-slate-50/50 sidebar-scroll shrink-0">
         <button onclick="switchTab('main-settings')" id="tab-btn-main-settings" class="tab-btn px-6 py-4 font-bold text-sm text-dranhs-green border-b-2 border-dranhs-green bg-white shrink-0">Main Settings</button>
-        <button onclick="switchTab('registries')" id="tab-btn-registries" class="tab-btn px-6 py-4 font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors shrink-0">Registries</button>
+        <button onclick="switchTab('registries')" id="tab-btn-registries" class="tab-btn px-6 py-4 font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors shrink-0">Section</button>
         <button onclick="switchTab('room-assignment')" id="tab-btn-room-assignment" class="tab-btn px-6 py-4 font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors shrink-0 flex items-center gap-2">Room Assignment</button>
         <button class="px-6 py-4 font-bold text-sm text-slate-400 cursor-not-allowed shrink-0 flex items-center gap-2">Theme <span class="bg-slate-200 text-slate-500 text-[10px] px-1.5 py-0.5 rounded-md uppercase tracking-wide">Soon</span></button>
         <button class="px-6 py-4 font-bold text-sm text-slate-400 cursor-not-allowed shrink-0 flex items-center gap-2">Curriculum <span class="bg-slate-200 text-slate-500 text-[10px] px-1.5 py-0.5 rounded-md uppercase tracking-wide">Soon</span></button>
@@ -243,16 +292,16 @@ function getRoomAssignment($roomNumber, $registries) {
             </form>
         </div>
 
-        <!-- REGISTRIES TAB -->
+        <!-- SECTIONS TAB -->
         <div id="tab-registries" class="tab-content hidden">
-            <h2 class="text-2xl font-heading font-black text-dranhs-dark mb-2">Core Database Registries</h2>
+            <h2 class="text-2xl font-heading font-black text-dranhs-dark mb-2">Core Database Sections</h2>
             <p class="text-sm text-slate-500 mb-8">Manage the selectable dictionaries available on different forms across the application.</p>
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
                 
                 <?php 
                 $columns = [
-                    'faculty_advisers' => 'Faculty Advisers',
+                    'g10_sections' => 'Grade 10 Sections',
                     'g11_sections' => 'Grade 11 Sections',
                     'g12_sections' => 'Grade 12 Sections'
                 ];
@@ -342,6 +391,7 @@ function getRoomAssignment($roomNumber, $registries) {
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-8">
                 <?php 
                 $dirs = [
+                    'g10_sections' => ['title' => 'Grade 10 Directory', 'color' => 'emerald'],
                     'g11_sections' => ['title' => 'Grade 11 Directory', 'color' => 'blue'],
                     'g12_sections' => ['title' => 'Grade 12 Directory', 'color' => 'pink']
                 ];

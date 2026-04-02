@@ -7,7 +7,13 @@ $conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
 
 $school_year = '2026 - 2027';
 $semester = '1st';
-$phase_start_date = date('Y-m-d'); 
+$phase_start_date = date('Y-m-d');
+$previous_school_year = '';
+
+if (preg_match('/^\s*(\d{4})\s*[-–]\s*(\d{4})\s*$/', $school_year, $matches)) {
+    $start_year = intval($matches[1]);
+    $previous_school_year = ($start_year - 1) . '-' . $start_year;
+}
 
 if (!$conn->connect_error) {
     $res = $conn->query("SELECT setting_key, setting_value FROM system_settings");
@@ -16,6 +22,17 @@ if (!$conn->connect_error) {
             if ($row['setting_key'] === 'academic_year') $school_year = $row['setting_value'];
             if ($row['setting_key'] === 'active_semester') $semester = $row['setting_value'];
             if ($row['setting_key'] === 'phase_start_date') $phase_start_date = $row['setting_value'];
+        }
+    }
+
+    // Fetch sections
+    $g10_sections = [];
+    $g12_sections = [];
+    $sec_res = $conn->query("SELECT grade_level, name FROM add_sections ORDER BY name");
+    if ($sec_res) {
+        while ($sec = $sec_res->fetch_assoc()) {
+            if ($sec['grade_level'] == '10') $g10_sections[] = $sec['name'];
+            if ($sec['grade_level'] == '12') $g12_sections[] = $sec['name'];
         }
     }
 }
@@ -47,6 +64,10 @@ if (!$conn->connect_error) {
     <script>
         // Settings injected from backend
         const SYSTEM_PHASE_START_DATE = '<?php echo $phase_start_date; ?>';
+        const CURRENT_SCHOOL_YEAR = '<?php echo addslashes($school_year); ?>';
+        const PREVIOUS_SCHOOL_YEAR = '<?php echo addslashes($previous_school_year); ?>';
+        const G10_SECTIONS = <?php echo json_encode($g10_sections); ?>;
+        const G12_SECTIONS = <?php echo json_encode($g12_sections); ?>;
     </script>
     <style type="text/tailwindcss">
         .form-section { @apply bg-white rounded-2xl shadow-sm border border-slate-200 p-6 lg:p-8 mb-6 relative overflow-hidden; }
@@ -56,6 +77,9 @@ if (!$conn->connect_error) {
         .form-label { @apply text-sm font-bold text-slate-600 uppercase tracking-wider; }
         .form-input { @apply w-full bg-white border-2 border-solid border-slate-400 shadow-sm px-4 py-3 rounded-xl text-slate-800 text-base outline-none transition-all focus:border-pink-600 focus:ring-4 focus:ring-pink-600/20 font-medium placeholder-slate-400; }
         .form-input:disabled { @apply bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed; }
+        #age-input { width: 4.4rem; min-width: 4.4rem; max-width: 4.4rem; box-sizing: border-box; text-align: center; }
+        #extension-name { width: 100%; min-width: 3rem; max-width: 6rem; box-sizing: border-box; }
+        #sex-input { max-width: 10rem; }
         .checkbox-label { @apply flex items-center gap-2 cursor-pointer text-base font-semibold text-slate-700; }
         .form-group:has(input:required) .form-label::after,
         .form-group:has(select:required) .form-label::after {
@@ -87,7 +111,7 @@ if (!$conn->connect_error) {
             <p class="text-slate-500 text-sm mt-2 max-w-2xl mx-auto">Please print legibly in all required fields. Submit accomplished form to the Person-in-Charge/Registrar. All information is handled with confidentially.</p>
         </div>
 
-        <form action="#" method="POST" class="space-y-8">
+        <form action="process_enrollment.php" method="POST" class="space-y-8">
             
             <!-- Type of Student & General Info -->
             <div class="form-section">
@@ -97,36 +121,56 @@ if (!$conn->connect_error) {
                         <label class="form-label">Learner Category</label>
                         <select name="student_type" class="form-input" required>
                             <option value="">Select Category...</option>
-                            <option value="New Student">New Student</option>
+                            <option value="Transferee">Transferee</option>
                             <option value="Old Student (Repeater)">Old Student (Repeater)</option>
                             <option value="Transferred In (Repeater)">Transferred In (Repeater)</option>
                         </select>
                     </div>
                 </div>
 
+                <!-- Previous School Information (conditional) -->
+                <div id="prev-school-section" class="hidden mt-2 border-t border-slate-100 pt-2">
+                    <h3 class="font-bold text-slate-800 mb-4 uppercase text-sm tracking-widest">Previous School Information</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="form-group">
+                            <label class="form-label">Previous School</label>
+                            <input type="text" name="prev_school" id="prev-school" class="form-input" placeholder="School Name">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Last School Year Attended</label>
+                            <input type="text" name="prev_school_year" id="prev-school-year" class="form-input" placeholder="e.g. 2024-2025">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Previous Section</label>
+                            <input type="text" name="prev_section" id="prev-section" class="form-input" placeholder="Section Name">
+                        </div>
+                    </div>
+                </div>
+
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div class="form-group">
                         <label class="form-label">School Year</label>
-                        <input type="text" class="form-input" value="2026 - 2027" placeholder="e.g. 2026 - 2027" readonly>
+                        <input type="text" name="school_year" class="form-input" value="<?php echo htmlspecialchars($school_year); ?>" placeholder="e.g. 2026 - 2027" readonly>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Grade Level To Enroll</label>
-                        <input type="text" class="form-input" value="Grade 12" readonly>
+                        <input type="text" name="grade_level" class="form-input" value="Grade 12" readonly>
                     </div>
                     <div class="form-group relative">
                         <div class="flex justify-between items-center w-full">
                             <label class="form-label">Learner Reference No. (LRN)</label>
                             <span id="lrn-counter" class="text-xs font-bold text-slate-400">0/12</span>
                         </div>
-                        <input type="text" id="lrn-input" class="form-input" placeholder="12-digit number" maxlength="12" pattern="\d{12}">
+                        <input type="text" id="lrn-input" name="lrn" class="form-input" placeholder="12-digit number" maxlength="12" pattern="\d{12}">
+                        <p id="lrn-status" class="text-xs font-semibold mt-2 min-h-[1.25rem] text-slate-400"></p>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Height (cm)</label>
-                        <input type="number" class="form-input" placeholder="Height in cm">
+                        <input type="number" name="height" class="form-input" placeholder="Height in cm">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Weight (kg)</label>
-                        <input type="number" step="0.1" class="form-input" placeholder="Weight in kg">
+                        <input type="number" step="0.1" name="weight" class="form-input" placeholder="Weight in kg">
                     </div>
                 </div>
             </div>
@@ -140,99 +184,50 @@ if (!$conn->connect_error) {
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
                     <div class="form-group md:col-span-2">
                         <label class="form-label">PSA Birth Certificate No.</label>
-                        <input type="text" class="form-input" placeholder="(if available upon registration)">
+                        <input type="text" name="psa_birth_cert" class="form-input" placeholder="(if available upon registration)">
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-12 gap-5 mb-6">
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-5 mb-6 items-end">
                     <div class="form-group md:col-span-4">
                         <label class="form-label">Last Name</label>
-                        <input type="text" class="form-input" required>
+                        <input type="text" name="last_name" class="form-input" required>
                     </div>
                     <div class="form-group md:col-span-4">
                         <label class="form-label">First Name</label>
-                        <input type="text" class="form-input" required>
+                        <input type="text" name="first_name" class="form-input" required>
                     </div>
                     <div class="form-group md:col-span-3">
                         <label class="form-label">Middle Name</label>
-                        <input type="text" class="form-input">
+                        <input type="text" name="middle_name" class="form-input">
                     </div>
                     <div class="form-group md:col-span-1">
                         <label class="form-label" title="Extension Name">Ext. Name</label>
-                        <input type="text" class="form-input" placeholder="Jr., III">
+                        <input type="text" id="extension-name" name="extension_name" class="form-input" placeholder="Jr., III">
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-5 mt-6 border-t border-slate-100 pt-6">
-                    <div class="form-group md:col-start-1">
-                        <label class="form-label">Country</label>
-                        <input type="text" class="form-input bg-slate-50 font-bold" value="PHILIPPINES" readonly>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">ZIP CODE</label>
-                        <input type="text" id="addr-zip" class="form-input px-2 text-center bg-slate-50 text-slate-600 font-bold" placeholder="Auto-fill" readonly>
-                    </div>
-                    <div class="form-group md:col-span-2">
-                        <label class="form-label">Living with</label>
-                        <select id="addr-living-with" class="form-input" required>
-                            <option value="">Select...</option>
-                            <option value="Parents">Parents</option>
-                            <option value="Relatives">Relatives</option>
-                            <option value="Guardian">Guardian</option>
-                            <option value="Boarding House / Dorm">Boarding House / Dorm</option>
-                            <option value="Others">Others</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Distance Restrictions -->
-                <div id="distance-warning-container" class="hidden mt-6 bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-xl">
-                    <div class="flex items-start gap-4">
-                        <div class="shrink-0 text-amber-500 mt-1">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                        </div>
-                        <div>
-                            <h3 class="text-amber-800 font-bold uppercase tracking-wider text-sm mb-1">Far Travel Distance Noticed</h3>
-                            <p class="text-sm text-amber-700 leading-relaxed mb-3">You reside quite far from the school at Matina Crossing. Extended travel times may significantly affect your daily attendance and academic performance.</p>
-                            <label class="checkbox-label text-amber-900 border-t border-amber-200/50 pt-3 flex items-start gap-2 text-xs lg:text-sm">
-                                <input type="checkbox" id="distance-checkbox" class="w-5 h-5 mt-0.5 rounded border-amber-300 text-amber-600 focus:ring-amber-500">
-                                <span class="leading-snug font-bold">I understand the travel conditions and I commit to managing my travel responsibly to ensure I attend daily classes on time.</span>
-                            </label>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="distance-restricted-container" class="hidden mt-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl">
-                    <div class="flex items-start gap-4">
-                        <div class="shrink-0 text-red-500 mt-1">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                        </div>
-                        <div>
-                            <h3 class="text-red-800 font-bold uppercase tracking-wider text-sm mb-1">Enrollment Restricted: Location Too Far</h3>
-                            <p class="text-sm text-red-700 leading-relaxed font-semibold">Your location is over an hour of travel from Matina Crossing. Policy restricts enrollment from extremely distant areas to protect student well-being. Application from this distance cannot be processed.</p>
-                        </div>
-                    </div>
-                </div>
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-5 mb-6 border-t border-slate-100 pt-6">
                     <div class="form-group md:col-span-3">
                         <label class="form-label">Birthdate</label>
-                        <input type="date" id="birthdate-input" class="form-input" required>
+                        <input type="date" id="birthdate-input" name="birthdate" class="form-input" required>
+                        <p class="text-xs text-slate-500 mt-1">Age is calculated as of phase start date: <strong><?php echo htmlspecialchars($phase_start_date); ?></strong></p>
                     </div>
                     <div class="form-group md:col-span-1">
                         <label class="form-label">Age</label>
-                        <input type="number" id="age-input" class="form-input px-2 text-center" readonly>
+                        <input type="number" id="age-input" name="age" class="form-input px-2 text-center" readonly>
                     </div>
-                    <div class="form-group md:col-span-3">
+                    <div class="form-group md:col-span-2">
                         <label class="form-label">Sex</label>
-                        <select class="form-input" required>
+                        <select id="sex-input" name="sex" class="form-input" required>
                             <option value="">Select...</option>
                             <option value="Male">Male</option>
                             <option value="Female">Female</option>
                         </select>
                     </div>
-                    <div class="form-group md:col-span-5">
+                    <div class="form-group md:col-span-6">
                         <label class="form-label">Place of Birth</label>
-                        <input type="text" class="form-input" placeholder="Municipality/City" required>
+                        <input type="text" name="place_of_birth" class="form-input" placeholder="Municipality/City" required>
                     </div>
                 </div>
 
@@ -244,17 +239,17 @@ if (!$conn->connect_error) {
                                 <label class="checkbox-label"><input type="radio" name="ip" value="Yes" class="w-5 h-5 text-pink-600"> Yes</label>
                                 <label class="checkbox-label"><input type="radio" name="ip" value="No" checked class="w-5 h-5 text-pink-600"> No</label>
                             </div>
-                            <input type="text" id="ip-specify" class="form-input flex-1 min-w-0" placeholder="If Yes, please specify" disabled>
+                            <input type="text" id="ip-specify" name="ip_specify" class="form-input flex-1 min-w-0" placeholder="If Yes, please specify" disabled>
                         </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <div class="form-group">
                             <label class="form-label">Mother Tongue</label>
-                            <input type="text" class="form-input" required>
+                            <input type="text" name="mother_tongue" class="form-input" required>
                         </div>
                         <div class="form-group">
                             <label class="form-label">Religion</label>
-                            <input type="text" class="form-input" required>
+                            <input type="text" name="religion" class="form-input" required>
                         </div>
                     </div>
                 </div>
@@ -267,7 +262,7 @@ if (!$conn->connect_error) {
                                 <label class="checkbox-label"><input type="radio" name="4ps" value="Yes" class="w-5 h-5 text-pink-600"> Yes</label>
                                 <label class="checkbox-label"><input type="radio" name="4ps" value="No" checked class="w-5 h-5 text-pink-600"> No</label>
                             </div>
-                            <input type="text" id="fps-specify" class="form-input flex-1 min-w-0" placeholder="4Ps Household ID Number" disabled>
+                            <input type="text" id="fps-specify" name="fps_specify" class="form-input flex-1 min-w-0" placeholder="4Ps Household ID Number" disabled>
                         </div>
                     </div>
                 </div>
@@ -281,7 +276,7 @@ if (!$conn->connect_error) {
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-5 mb-5">
                     <div class="form-group md:col-span-3">
                         <label class="form-label">Sitio/Purok/Street Name</label>
-                        <input type="text" id="addr-street" name="street" class="form-input" disabled placeholder="House No. / Street">
+                        <input type="text" id="addr-street" name="street" class="form-input" disabled required placeholder="House No. / Street">
                     </div>
                     <div class="form-group md:col-span-1">
                         <label class="form-label">Country</label>
@@ -309,13 +304,13 @@ if (!$conn->connect_error) {
                     </div>
                     <div class="form-group">
                         <label class="form-label">ZIP CODE</label>
-                        <input type="text" id="addr-zip" class="form-input px-2 text-center bg-slate-50 text-slate-600 font-bold" placeholder="Auto-fill" readonly>
+                        <input type="text" id="addr-zip" name="zip_code" class="form-input px-2 text-center bg-slate-50 text-slate-600 font-bold" placeholder="Auto-fill" readonly>
                     </div>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-5">
                     <div class="form-group md:col-span-2 lg:col-span-1">
                         <label class="form-label">Living with</label>
-                        <select id="addr-living-with" class="form-input" required>
+                        <select id="addr-living-with" name="living_with" class="form-input" required>
                             <option value="">Select...</option>
                             <option value="Parents">Parents</option>
                             <option value="Relatives">Relatives</option>
@@ -323,6 +318,35 @@ if (!$conn->connect_error) {
                             <option value="Boarding House / Dorm">Boarding House / Dorm</option>
                             <option value="Others">Others</option>
                         </select>
+                    </div>
+                </div>
+
+                <!-- Distance Restrictions (moved to Current Address section) -->
+                <div id="distance-warning-container" class="hidden mt-6 bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-xl">
+                    <div class="flex items-start gap-4">
+                        <div class="shrink-0 text-amber-500 mt-1">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                        </div>
+                        <div>
+                            <h3 class="text-amber-800 font-bold uppercase tracking-wider text-sm mb-1">Far Travel Distance Noticed</h3>
+                            <p class="text-sm text-amber-700 leading-relaxed mb-3">Your selected location is considered far; long travel durations may affect consistent class attendance. You must acknowledge this before submitting.</p>
+                            <label class="checkbox-label text-amber-900 border-t border-amber-200/50 pt-3 flex items-start gap-2 text-xs lg:text-sm">
+                                <input type="checkbox" id="distance-checkbox" class="w-5 h-5 mt-0.5 rounded border-amber-300 text-amber-600 focus:ring-amber-500">
+                                <span class="leading-snug font-bold">I understand the travel conditions and I will take responsibility for my daily attendance despite distance challenges.</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="distance-restricted-container" class="hidden mt-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl">
+                    <div class="flex items-start gap-4">
+                        <div class="shrink-0 text-red-500 mt-1">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                        </div>
+                        <div>
+                            <h3 class="text-red-800 font-bold uppercase tracking-wider text-sm mb-1">Enrollment Restricted: Location Too Far</h3>
+                            <p class="text-sm text-red-700 leading-relaxed font-semibold">Your location is over an hour of travel from Matina Crossing. Policy restricts enrollment from extremely distant areas to protect student well-being. Application from this distance cannot be processed.</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -334,30 +358,30 @@ if (!$conn->connect_error) {
                 </div>
                 
                 <!-- Father -->
-                <h3 class="font-bold text-slate-800 mb-2">Father's Name</h3>
+                <h3 class="font-bold text-slate-800 mb-2">Father's Name <span class="text-red-500">*</span></h3>
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                    <div class="form-group"><input type="text" class="form-input" placeholder="Last Name" required></div>
-                    <div class="form-group"><input type="text" class="form-input" placeholder="First Name" required></div>
-                    <div class="form-group"><input type="text" class="form-input" placeholder="Middle Name"></div>
-                    <div class="form-group"><input type="text" class="form-input" placeholder="Contact Number/s" required></div>
+                    <div class="form-group"><input type="text" name="father_last_name" class="form-input" placeholder="Last Name" required></div>
+                    <div class="form-group"><input type="text" name="father_first_name" class="form-input" placeholder="First Name" required></div>
+                    <div class="form-group"><input type="text" name="father_middle_name" class="form-input" placeholder="Middle Name" required></div>
+                    <div class="form-group"><input type="text" name="father_contact" class="form-input" placeholder="Contact Number/s" required></div>
                 </div>
 
                 <!-- Mother -->
-                <h3 class="font-bold text-slate-800 mb-2">Mother's Maiden Name</h3>
+                <h3 class="font-bold text-slate-800 mb-2">Mother's Maiden Name <span class="text-red-500">*</span></h3>
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                    <div class="form-group"><input type="text" class="form-input" placeholder="Last Name" required></div>
-                    <div class="form-group"><input type="text" class="form-input" placeholder="First Name" required></div>
-                    <div class="form-group"><input type="text" class="form-input" placeholder="Middle Name"></div>
-                    <div class="form-group"><input type="text" class="form-input" placeholder="Contact Number/s" required></div>
+                    <div class="form-group"><input type="text" name="mother_last_name" class="form-input" placeholder="Last Name" required></div>
+                    <div class="form-group"><input type="text" name="mother_first_name" class="form-input" placeholder="First Name" required></div>
+                    <div class="form-group"><input type="text" name="mother_middle_name" class="form-input" placeholder="Middle Name" required></div>
+                    <div class="form-group"><input type="text" name="mother_contact" class="form-input" placeholder="Contact Number/s" required></div>
                 </div>
 
                 <!-- Guardian -->
                 <h3 class="font-bold text-slate-800 mb-2">Legal Guardian's Name</h3>
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div class="form-group"><input type="text" class="form-input" placeholder="Last Name"></div>
-                    <div class="form-group"><input type="text" class="form-input" placeholder="First Name"></div>
-                    <div class="form-group"><input type="text" class="form-input" placeholder="Middle Name"></div>
-                    <div class="form-group"><input type="text" class="form-input" placeholder="Contact Number/s"></div>
+                    <div class="form-group"><input type="text" name="guardian_last_name" class="form-input" placeholder="Last Name" required></div>
+                    <div class="form-group"><input type="text" name="guardian_first_name" class="form-input" placeholder="First Name" required></div>
+                    <div class="form-group"><input type="text" name="guardian_middle_name" class="form-input" placeholder="Middle Name"></div>
+                    <div class="form-group"><input type="text" name="guardian_contact" class="form-input" placeholder="Contact Number/s" required></div>
                 </div>
             </div>
 
@@ -370,10 +394,11 @@ if (!$conn->connect_error) {
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div class="form-group">
                         <label class="form-label">Semester</label>
-                        <select class="form-input">
-                            <option value="1st">1st Semester</option>
-                            <option value="2nd">2nd Semester</option>
+                        <select class="form-input" disabled>
+                            <option value="1st"<?php echo ($semester === '1st' ? ' selected' : ''); ?>>1st Semester</option>
+                            <option value="2nd"<?php echo ($semester === '2nd' ? ' selected' : ''); ?>>2nd Semester</option>
                         </select>
+                        <input type="hidden" name="semester" value="<?php echo htmlspecialchars($semester); ?>">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Track</label>
@@ -449,6 +474,85 @@ if (!$conn->connect_error) {
                 }
             }
             initFormLogic('pink');
+
+            // Handle student type change for previous school info
+            const studentTypeSelect = document.querySelector('select[name="student_type"]');
+            const prevSection = document.getElementById('prev-school-section');
+            const prevSchool = document.getElementById('prev-school');
+            const prevYear = document.getElementById('prev-school-year');
+            const prevSectionInput = document.getElementById('prev-section');
+
+            studentTypeSelect.addEventListener('change', function() {
+                const selected = this.value;
+
+                if (selected === 'Transferee') {
+                    prevSection.classList.remove('hidden');
+                    prevSchool.value = '';
+                    prevSchool.readOnly = false;
+                    prevYear.value = '';
+                    prevYear.disabled = false;
+                    prevSectionInput.value = '';
+                    prevSectionInput.disabled = false;
+                    prevSectionInput.placeholder = 'Section Name';
+                } else if (selected === 'Old Student (Repeater)') {
+                    prevSection.classList.remove('hidden');
+                    prevSchool.value = 'Daniel R. Aguinaldo National High School';
+                    prevSchool.readOnly = true;
+                    prevYear.value = PREVIOUS_SCHOOL_YEAR || '2025-2026';
+                    prevYear.disabled = false;
+                    showSelectSection(G12_SECTIONS);
+                } else if (selected === 'Transferred In (Repeater)') {
+                    prevSection.classList.remove('hidden');
+                    prevSchool.value = '';
+                    prevSchool.readOnly = false;
+                    prevYear.value = '';
+                    prevYear.disabled = false;
+                    prevSectionInput.value = '';
+                    prevSectionInput.disabled = false;
+                    prevSectionInput.placeholder = 'Section Name';
+                } else {
+                    prevSection.classList.add('hidden');
+                }
+            });
+
+            function showSelectSection(options) {
+                if (!Array.isArray(options) || options.length === 0) {
+                    prevSectionInput.value = '';
+                    prevSectionInput.placeholder = 'No Grade 12 sections yet';
+                    return;
+                }
+
+                prevSectionInput.disabled = false;
+                prevSectionInput.placeholder = 'Select or type Section Name';
+                prevSectionInput.value = options[0] || '';
+            }
+
+            function populateSections(select, sections) {
+                if (!select || select.tagName !== 'SELECT') return;
+                select.innerHTML = '<option value="">Select Section...</option>';
+                sections.forEach(sec => {
+                    const option = document.createElement('option');
+                    option.value = sec;
+                    option.textContent = sec;
+                    select.appendChild(option);
+                });
+            }
+
+            function populateYear(select) {
+                if (!select || select.tagName !== 'SELECT') return;
+                const defaultYear = PREVIOUS_SCHOOL_YEAR || '2025-2026';
+                const yearParts = defaultYear.split('-').map(v => parseInt(v.trim()));
+                let start = yearParts[0] || 2025;
+
+                select.innerHTML = '<option value="">Select Year...</option>';
+                for (let i = 0; i < 6; i++) {
+                    const val = `${start + i}-${start + i + 1}`;
+                    const option = document.createElement('option');
+                    option.value = val;
+                    option.textContent = val;
+                    select.appendChild(option);
+                }
+            }
         });
     </script>
     <script src="davao-address.js"></script>
