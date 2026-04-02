@@ -1,11 +1,74 @@
 // Shared logic for both G11 and G12 Enrollment Forms
 
 function initFormLogic(themeColor) {
-    
+
+    let lrnCheckState = 'idle';
+    let lastCheckedLrn = '';
+
+    const setLrnStatus = (message = '', status = 'idle') => {
+        const lrnInput = document.getElementById('lrn-input');
+        const lrnStatus = document.getElementById('lrn-status');
+        if (!lrnInput || !lrnStatus) return;
+
+        lrnStatus.textContent = message;
+        lrnStatus.className = 'text-xs font-semibold mt-2 min-h-[1.25rem]';
+        lrnInput.classList.remove('border-red-500', 'ring-4', 'ring-red-500/20', 'border-emerald-500', 'ring-emerald-500/20');
+
+        if (status === 'error') {
+            lrnStatus.classList.add('text-red-600');
+            lrnInput.classList.add('border-red-500', 'ring-4', 'ring-red-500/20');
+        } else if (status === 'success') {
+            lrnStatus.classList.add('text-emerald-600');
+            lrnInput.classList.add('border-emerald-500', 'ring-4', 'ring-emerald-500/20');
+        } else if (status === 'loading') {
+            lrnStatus.classList.add('text-slate-500');
+        } else {
+            lrnStatus.classList.add('text-slate-400');
+        }
+    };
+
+    const checkLrnAvailability = async (lrn) => {
+        if (!lrn || lrn.length !== 12) {
+            lrnCheckState = 'idle';
+            lastCheckedLrn = '';
+            return;
+        }
+
+        lrnCheckState = 'loading';
+        lastCheckedLrn = lrn;
+        setLrnStatus('Checking LRN availability...', 'loading');
+
+        try {
+            const response = await fetch(`check_lrn.php?lrn=${encodeURIComponent(lrn)}`, {
+                headers: { 'Accept': 'application/json' }
+            });
+            const data = await response.json();
+
+            if (lrnInput.value !== lrn) return;
+
+            if (!data.ok) {
+                lrnCheckState = 'error';
+                setLrnStatus(data.message || 'Unable to verify LRN right now.', 'error');
+                return;
+            }
+
+            if (data.exists) {
+                lrnCheckState = 'exists';
+                setLrnStatus(data.message || 'This LRN already exists in the database.', 'error');
+            } else {
+                lrnCheckState = 'available';
+                setLrnStatus(data.message || 'LRN is available.', 'success');
+            }
+        } catch (error) {
+            if (lrnInput.value !== lrn) return;
+            lrnCheckState = 'error';
+            setLrnStatus('Unable to verify LRN right now. You can try again in a moment.', 'error');
+        }
+    };
+
     // 1. LRN Validation and Counter
     const lrnInput = document.getElementById('lrn-input');
     const lrnCounter = document.getElementById('lrn-counter');
-    
     if (lrnInput && lrnCounter) {
         // Restrict to numbers only
         lrnInput.addEventListener('input', function(e) {
@@ -26,6 +89,28 @@ function initFormLogic(themeColor) {
             } else {
                 lrnCounter.classList.remove('text-red-500', `text-${themeColor}-600`);
                 lrnCounter.classList.add('text-slate-400');
+            }
+
+            if (count === 0) {
+                lrnCheckState = 'idle';
+                lastCheckedLrn = '';
+                setLrnStatus('', 'idle');
+                return;
+            }
+
+            if (count < 12) {
+                lrnCheckState = 'idle';
+                lastCheckedLrn = '';
+                setLrnStatus('Complete the 12-digit LRN to check if it already exists.', 'idle');
+                return;
+            }
+
+            checkLrnAvailability(this.value);
+        });
+
+        lrnInput.addEventListener('blur', function() {
+            if (this.value.length === 12 && this.value !== lastCheckedLrn) {
+                checkLrnAvailability(this.value);
             }
         });
     }
@@ -95,6 +180,13 @@ function initFormLogic(themeColor) {
     const acadInputs = document.querySelectorAll('.acad-input');
     const trackSelect = document.getElementById('g11-track');
     const pathwaySelect = document.getElementById('g11-pathway');
+    const trackHiddenInput = document.getElementById('g11-track-hidden');
+    const pathwayHiddenInput = document.getElementById('g11-pathway-hidden');
+
+    const syncG11AcademicHiddenFields = () => {
+        if (trackHiddenInput) trackHiddenInput.value = trackSelect ? trackSelect.value : '';
+        if (pathwayHiddenInput) pathwayHiddenInput.value = pathwaySelect ? pathwaySelect.value : '';
+    };
 
     // Define Pathways dynamically
     const pathwaysData = {
@@ -148,11 +240,15 @@ function initFormLogic(themeColor) {
             if (pathwaySelect.querySelector(`option[value="${currentPathway}"]`)) {
                 pathwaySelect.value = currentPathway;
             }
+
+            syncG11AcademicHiddenFields();
         };
 
         trackSelect.addEventListener('change', updatePathways);
+        pathwaySelect.addEventListener('change', syncG11AcademicHiddenFields);
         // Also trigger on init
         if(trackSelect.value) updatePathways();
+        syncG11AcademicHiddenFields();
     }
 
     // 5.5 G12 Academic Setup Strand Filtering
@@ -298,15 +394,17 @@ function initFormLogic(themeColor) {
             // Need a tiny delay to ensure values are updated by other listeners
             setTimeout(() => {
                 const city = citySelect ? citySelect.value : '';
+                const prov = provSelect ? provSelect.value : '';
                 const brgy = brgySelect ? brgySelect.value.toLowerCase() : '';
                 
                 if (!city || !brgy || city.includes('Select')) {
                     currentMode = 'normal';
-                } else if (!city.includes('Davao')) {
-                    // Any other city/municipality entirely restricted
+                } else if (prov && !prov.toLowerCase().includes('davao')) {
+                    // Outside the Davao region range is blocked.
                     currentMode = 'restricted';
                 } else {
-                    // Far-flung, mountainous, or completely distinct areas
+                    // Within Davao region: compute more specific zoning rules.
+                    // City fields in Davao Del Norte/Sur/Oro/etc are allowed by default.
                     const isRestrictedBrgy = [
                         'marilog', 'paquibato', 'baguio', 'tambobong', 'tapak', 'salaysay', 'gumitan', 'suawan', 
                         'lasang', 'bunawan', 'tibungco', 'ilang', 'mudiang', 'mahagob', 'dalag', 'dalagdag',
@@ -360,16 +458,32 @@ function initFormLogic(themeColor) {
 
         const form = submitBtn.closest('form');
         if(form) {
-            form.addEventListener('submit', (e) => {
+            form.addEventListener('submit', async (e) => {
+                const currentLrn = lrnInput ? lrnInput.value.trim() : '';
+
+                if (lrnInput && currentLrn.length === 12 && currentLrn !== lastCheckedLrn) {
+                    e.preventDefault();
+                    await checkLrnAvailability(currentLrn);
+                    if (lrnCheckState !== 'available') return;
+                    form.requestSubmit();
+                    return;
+                }
+
+                if (lrnInput && currentLrn.length === 12 && lrnCheckState === 'exists') {
+                    e.preventDefault();
+                    setLrnStatus('This LRN already exists in the database.', 'error');
+                    lrnInput.focus();
+                    return;
+                }
+
                 if (currentMode === 'warning' && !distCheckbox.checked) {
                     e.preventDefault();
                     submitError.classList.remove('hidden');
                 } else if (currentMode === 'restricted') {
                     e.preventDefault();
                 } else {
-                    e.preventDefault(); 
-                    alert("Enrollment Form Submitted Successfully!");
-                    window.location.href = 'index.php';
+                    // Allow the form to submit to process_enrollment.php.
+                    // Remove the fake success behavior and let the server handle persistence.
                 }
             });
         }

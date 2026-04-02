@@ -7,7 +7,13 @@ $conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
 
 $school_year = '2026 - 2027';
 $semester = '1st';
-$phase_start_date = date('Y-m-d'); 
+$phase_start_date = date('Y-m-d');
+$previous_school_year = '';
+
+if (preg_match('/^\s*(\d{4})\s*[-–]\s*(\d{4})\s*$/', $school_year, $matches)) {
+    $start_year = intval($matches[1]);
+    $previous_school_year = ($start_year - 1) . '-' . $start_year;
+}
 
 if (!$conn->connect_error) {
     $res = $conn->query("SELECT setting_key, setting_value FROM system_settings");
@@ -16,6 +22,17 @@ if (!$conn->connect_error) {
             if ($row['setting_key'] === 'academic_year') $school_year = $row['setting_value'];
             if ($row['setting_key'] === 'active_semester') $semester = $row['setting_value'];
             if ($row['setting_key'] === 'phase_start_date') $phase_start_date = $row['setting_value'];
+        }
+    }
+
+    // Fetch sections
+    $g10_sections = [];
+    $g11_sections = [];
+    $sec_res = $conn->query("SELECT grade_level, name FROM add_sections ORDER BY name");
+    if ($sec_res) {
+        while ($sec = $sec_res->fetch_assoc()) {
+            if ($sec['grade_level'] == '10') $g10_sections[] = $sec['name'];
+            if ($sec['grade_level'] == '11') $g11_sections[] = $sec['name'];
         }
     }
 }
@@ -47,6 +64,10 @@ if (!$conn->connect_error) {
     <script>
         // Settings injected from backend
         const SYSTEM_PHASE_START_DATE = '<?php echo $phase_start_date; ?>';
+        const CURRENT_SCHOOL_YEAR = '<?php echo addslashes($school_year); ?>';
+        const PREVIOUS_SCHOOL_YEAR = '<?php echo addslashes($previous_school_year); ?>';
+        const G10_SECTIONS = <?php echo json_encode($g10_sections); ?>;
+        const G11_SECTIONS = <?php echo json_encode($g11_sections); ?>;
     </script>
     <style type="text/tailwindcss">
         .form-section { @apply bg-white rounded-2xl shadow-sm border border-slate-200 p-6 lg:p-8 mb-6 relative overflow-hidden; }
@@ -56,6 +77,9 @@ if (!$conn->connect_error) {
         .form-label { @apply text-sm font-bold text-slate-600 uppercase tracking-wider; }
         .form-input { @apply w-full bg-white border-2 border-solid border-slate-400 shadow-sm px-4 py-3 rounded-xl text-slate-800 text-base outline-none transition-all focus:border-violet-600 focus:ring-4 focus:ring-violet-600/20 font-medium placeholder-slate-400; }
         .form-input:disabled { @apply bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed; }
+        #age-input { width: 4.4rem; min-width: 4.4rem; max-width: 4.4rem; box-sizing: border-box; text-align: center; }
+        #extension-name { width: 100%; min-width: 3rem; max-width: 6rem; box-sizing: border-box; }
+        #sex-input { max-width: 10rem; }
         .checkbox-label { @apply flex items-center gap-2 cursor-pointer text-base font-semibold text-slate-700; }
         .form-group:has(input:required) .form-label::after,
         .form-group:has(select:required) .form-label::after {
@@ -87,7 +111,7 @@ if (!$conn->connect_error) {
             <p class="text-slate-500 text-sm mt-2 max-w-2xl mx-auto">Please print legibly in all required fields. Submit accomplished form to the Person-in-Charge/Registrar. All information is handled with confidentially.</p>
         </div>
 
-        <form action="#" method="POST" class="space-y-8">
+        <form action="process_enrollment.php" method="POST" enctype="multipart/form-data" class="space-y-8">
             
             <!-- Type of Student & General Info -->
             <div class="form-section">
@@ -106,29 +130,52 @@ if (!$conn->connect_error) {
                     </div>
                 </div>
 
+                <!-- Previous School Information (conditional) -->
+                <div id="prev-school-section" class="hidden mt-2 border-t border-slate-100 pt-2">
+                    <h3 class="font-bold text-slate-800 mb-4 uppercase text-sm tracking-widest">Previous School Information</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="form-group">
+                            <label class="form-label">Previous School</label>
+                            <input type="text" name="prev_school" id="prev-school" class="form-input" placeholder="School Name">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Last School Year Attended</label>
+                            <input type="text" name="prev_school_year" id="prev-school-year" class="form-input" placeholder="e.g. 2024-2025">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Previous Section</label>
+                            <input type="text" name="prev_section" id="prev-section-text" class="form-input" placeholder="Section Name">
+                            <select name="prev_section" id="prev-section-select" class="form-input hidden" disabled>
+                                <option value="">Select Section...</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div class="form-group">
                         <label class="form-label">School Year</label>
-                        <input type="text" class="form-input" value="2026 - 2027" placeholder="e.g. 2026 - 2027" readonly>
+                        <input type="text" name="school_year" class="form-input" value="<?php echo htmlspecialchars($school_year); ?>" placeholder="e.g. 2026 - 2027" readonly>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Grade Level To Enroll</label>
-                        <input type="text" class="form-input" value="Grade 11" readonly>
+                        <input type="text" name="grade_level" class="form-input" value="Grade 11" readonly>
                     </div>
                     <div class="form-group relative">
                         <div class="flex justify-between items-center w-full">
                             <label class="form-label">Learner Reference No. (LRN)</label>
                             <span id="lrn-counter" class="text-xs font-bold text-slate-400">0/12</span>
                         </div>
-                        <input type="text" id="lrn-input" class="form-input" placeholder="12-digit number" maxlength="12" pattern="\d{12}">
+                        <input type="text" id="lrn-input" name="lrn" class="form-input" placeholder="12-digit number" maxlength="12" pattern="\d{12}">
+                        <p id="lrn-status" class="text-xs font-semibold mt-2 min-h-[1.25rem] text-slate-400"></p>
                     </div>
                     <div class="form-group">
                         <label class="form-label">Height (cm)</label>
-                        <input type="number" class="form-input" placeholder="Height in cm">
+                        <input type="number" name="height" class="form-input" placeholder="Height in cm">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Weight (kg)</label>
-                        <input type="number" step="0.1" class="form-input" placeholder="Weight in kg">
+                        <input type="number" step="0.1" name="weight" class="form-input" placeholder="Weight in kg">
                     </div>
                 </div>
             </div>
@@ -142,49 +189,50 @@ if (!$conn->connect_error) {
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
                     <div class="form-group md:col-span-2">
                         <label class="form-label">PSA Birth Certificate No.</label>
-                        <input type="text" class="form-input" placeholder="(if available upon registration)">
+                        <input type="text" name="psa_birth_cert" class="form-input" placeholder="(if available upon registration)">
                     </div>
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-12 gap-5 mb-6">
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-5 mb-6 items-end">
                     <div class="form-group md:col-span-4">
                         <label class="form-label">Last Name</label>
-                        <input type="text" class="form-input" required>
+                        <input type="text" name="last_name" class="form-input" required>
                     </div>
                     <div class="form-group md:col-span-4">
                         <label class="form-label">First Name</label>
-                        <input type="text" class="form-input" required>
+                        <input type="text" name="first_name" class="form-input" required>
                     </div>
                     <div class="form-group md:col-span-3">
                         <label class="form-label">Middle Name</label>
-                        <input type="text" class="form-input">
+                        <input type="text" name="middle_name" class="form-input">
                     </div>
                     <div class="form-group md:col-span-1">
                         <label class="form-label" title="Extension Name">Ext. Name</label>
-                        <input type="text" class="form-input" placeholder="Jr., III">
+                        <input type="text" id="extension-name" name="extension_name" class="form-input" placeholder="Jr., III">
                     </div>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-5 mb-6 border-t border-slate-100 pt-6">
                     <div class="form-group md:col-span-3">
                         <label class="form-label">Birthdate</label>
-                        <input type="date" id="birthdate-input" class="form-input" required>
+                        <input type="date" id="birthdate-input" name="birthdate" class="form-input" required>
+                        <p class="text-xs text-slate-500 mt-1">Age is calculated as of phase start date: <strong><?php echo htmlspecialchars($phase_start_date); ?></strong></p>
                     </div>
                     <div class="form-group md:col-span-1">
                         <label class="form-label">Age</label>
-                        <input type="number" id="age-input" class="form-input px-2 text-center" readonly>
+                        <input type="number" id="age-input" name="age" class="form-input px-2 text-center" readonly>
                     </div>
-                    <div class="form-group md:col-span-3">
+                    <div class="form-group md:col-span-2">
                         <label class="form-label">Sex</label>
-                        <select class="form-input" required>
+                        <select id="sex-input" name="sex" class="form-input" required>
                             <option value="">Select...</option>
                             <option value="Male">Male</option>
                             <option value="Female">Female</option>
                         </select>
                     </div>
-                    <div class="form-group md:col-span-5">
+                    <div class="form-group md:col-span-6">
                         <label class="form-label">Place of Birth</label>
-                        <input type="text" class="form-input" placeholder="Municipality/City" required>
+                        <input type="text" name="place_of_birth" class="form-input" placeholder="Municipality/City" required>
                     </div>
                 </div>
 
@@ -196,17 +244,17 @@ if (!$conn->connect_error) {
                                 <label class="checkbox-label"><input type="radio" name="ip" value="Yes" class="w-5 h-5 text-violet-600"> Yes</label>
                                 <label class="checkbox-label"><input type="radio" name="ip" value="No" checked class="w-5 h-5 text-violet-600"> No</label>
                             </div>
-                            <input type="text" id="ip-specify" class="form-input flex-1 min-w-0" placeholder="If Yes, please specify" disabled>
+                            <input type="text" id="ip-specify" name="ip_specify" class="form-input flex-1 min-w-0" placeholder="If Yes, please specify" disabled>
                         </div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <div class="form-group">
                             <label class="form-label">Mother Tongue</label>
-                            <input type="text" class="form-input" required>
+                            <input type="text" name="mother_tongue" class="form-input" required>
                         </div>
                         <div class="form-group">
                             <label class="form-label">Religion</label>
-                            <input type="text" class="form-input" required>
+                            <input type="text" name="religion" class="form-input" required>
                         </div>
                     </div>
                 </div>
@@ -219,7 +267,7 @@ if (!$conn->connect_error) {
                                 <label class="checkbox-label"><input type="radio" name="4ps" value="Yes" class="w-5 h-5 text-violet-600"> Yes</label>
                                 <label class="checkbox-label"><input type="radio" name="4ps" value="No" checked class="w-5 h-5 text-violet-600"> No</label>
                             </div>
-                            <input type="text" id="fps-specify" class="form-input flex-1 min-w-0" placeholder="4Ps Household ID Number" disabled>
+                            <input type="text" id="fps-specify" name="fps_specify" class="form-input flex-1 min-w-0" placeholder="4Ps Household ID Number" disabled>
                         </div>
                     </div>
                 </div>
@@ -233,7 +281,7 @@ if (!$conn->connect_error) {
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-5 mb-5">
                     <div class="form-group md:col-span-3">
                         <label class="form-label">Sitio/Purok/Street Name</label>
-                        <input type="text" id="addr-street" name="street" class="form-input" disabled placeholder="House No. / Street">
+                        <input type="text" id="addr-street" name="street" class="form-input" disabled required placeholder="House No. / Street">
                     </div>
                     <div class="form-group md:col-span-1">
                         <label class="form-label">Country</label>
@@ -261,13 +309,13 @@ if (!$conn->connect_error) {
                     </div>
                     <div class="form-group">
                         <label class="form-label">ZIP CODE</label>
-                        <input type="text" id="addr-zip" class="form-input px-2 text-center bg-slate-50 text-slate-600 font-bold" placeholder="Auto-fill" readonly>
+                        <input type="text" id="addr-zip" name="zip_code" class="form-input px-2 text-center bg-slate-50 text-slate-600 font-bold" placeholder="Auto-fill" readonly>
                     </div>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-5">
                     <div class="form-group md:col-span-2 lg:col-span-1">
                         <label class="form-label">Living with</label>
-                        <select id="addr-living-with" class="form-input" required>
+                        <select id="addr-living-with" name="living_with" class="form-input" required>
                             <option value="">Select...</option>
                             <option value="Parents">Parents</option>
                             <option value="Relatives">Relatives</option>
@@ -315,30 +363,30 @@ if (!$conn->connect_error) {
                 </div>
                 
                 <!-- Father -->
-                <h3 class="font-bold text-slate-800 mb-2">Father's Name</h3>
+                <h3 class="font-bold text-slate-800 mb-2">Father's Name <span class="text-red-500">*</span></h3>
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                    <div class="form-group"><input type="text" class="form-input" placeholder="Last Name" required></div>
-                    <div class="form-group"><input type="text" class="form-input" placeholder="First Name" required></div>
-                    <div class="form-group"><input type="text" class="form-input" placeholder="Middle Name"></div>
-                    <div class="form-group"><input type="text" class="form-input" placeholder="Contact Number/s" required></div>
+                    <div class="form-group"><input type="text" name="father_last_name" class="form-input" placeholder="Last Name" required></div>
+                    <div class="form-group"><input type="text" name="father_first_name" class="form-input" placeholder="First Name" required></div>
+                    <div class="form-group"><input type="text" name="father_middle_name" class="form-input" placeholder="Middle Name" required></div>
+                    <div class="form-group"><input type="text" name="father_contact" class="form-input" placeholder="Contact Number/s" required></div>
                 </div>
 
                 <!-- Mother -->
-                <h3 class="font-bold text-slate-800 mb-2">Mother's Maiden Name</h3>
+                <h3 class="font-bold text-slate-800 mb-2">Mother's Maiden Name <span class="text-red-500">*</span></h3>
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                    <div class="form-group"><input type="text" class="form-input" placeholder="Last Name" required></div>
-                    <div class="form-group"><input type="text" class="form-input" placeholder="First Name" required></div>
-                    <div class="form-group"><input type="text" class="form-input" placeholder="Middle Name"></div>
-                    <div class="form-group"><input type="text" class="form-input" placeholder="Contact Number/s" required></div>
+                    <div class="form-group"><input type="text" name="mother_last_name" class="form-input" placeholder="Last Name" required></div>
+                    <div class="form-group"><input type="text" name="mother_first_name" class="form-input" placeholder="First Name" required></div>
+                    <div class="form-group"><input type="text" name="mother_middle_name" class="form-input" placeholder="Middle Name" required></div>
+                    <div class="form-group"><input type="text" name="mother_contact" class="form-input" placeholder="Contact Number/s" required></div>
                 </div>
 
                 <!-- Guardian -->
                 <h3 class="font-bold text-slate-800 mb-2">Legal Guardian's Name</h3>
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div class="form-group"><input type="text" class="form-input" placeholder="Last Name"></div>
-                    <div class="form-group"><input type="text" class="form-input" placeholder="First Name"></div>
-                    <div class="form-group"><input type="text" class="form-input" placeholder="Middle Name"></div>
-                    <div class="form-group"><input type="text" class="form-input" placeholder="Contact Number/s"></div>
+                    <div class="form-group"><input type="text" name="guardian_last_name" class="form-input" placeholder="Last Name" required></div>
+                    <div class="form-group"><input type="text" name="guardian_first_name" class="form-input" placeholder="First Name" required></div>
+                    <div class="form-group"><input type="text" name="guardian_middle_name" class="form-input" placeholder="Middle Name"></div>
+                    <div class="form-group"><input type="text" name="guardian_contact" class="form-input" placeholder="Contact Number/s" required></div>
                 </div>
             </div>
 
@@ -354,7 +402,7 @@ if (!$conn->connect_error) {
                 </div>
                 <p class="text-xs text-slate-500 mb-4 font-semibold italic">If yes, specify Diagnosis or Manifestations and provide PWD ID if available.</p>
                 <div class="form-group">
-                    <textarea class="form-input h-24 resize-none" placeholder="Describe diagnosis or manifestations here..."></textarea>
+                    <textarea name="sped_diagnosis" class="form-input h-24 resize-none" placeholder="Describe diagnosis or manifestations here..."></textarea>
                 </div>
                 <div class="flex items-center gap-4 mt-4">
                     <span class="text-sm font-bold text-slate-600">Does the Learner have PWD ID?</span>
@@ -380,9 +428,10 @@ if (!$conn->connect_error) {
                     <div class="form-group">
                         <label class="form-label">Semester</label>
                         <select class="form-input acad-input" disabled>
-                            <option value="1st">1st Semester</option>
-                            <option value="2nd">2nd Semester</option>
+                            <option value="1st"<?php echo ($semester === '1st' ? ' selected' : ''); ?>>1st Semester</option>
+                            <option value="2nd"<?php echo ($semester === '2nd' ? ' selected' : ''); ?>>2nd Semester</option>
                         </select>
+                        <input type="hidden" name="semester" value="<?php echo htmlspecialchars($semester); ?>">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Track</label>
@@ -391,6 +440,7 @@ if (!$conn->connect_error) {
                             <option value="Academic">Academic</option>
                             <option value="Tech-Pro">Tech-Pro</option>
                         </select>
+                        <input type="hidden" name="track" id="g11-track-hidden">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Career Pathway</label>
@@ -412,6 +462,7 @@ if (!$conn->connect_error) {
                             <option value="Kitchen Operations (Cookery)">Kitchen Operations (Cookery)</option>
                             <option value="Aesthetic Services (Beauty Care)">Aesthetic Services (Beauty Care)</option>
                         </select>
+                        <input type="hidden" name="pathway" id="g11-pathway-hidden">
                     </div>
                 </div>
             </div>
@@ -486,6 +537,107 @@ if (!$conn->connect_error) {
                 }
             }
             if(pathway) pathwaySelect.value = pathway;
+
+            // Handle student type change for previous school info
+            studentTypeSelect.addEventListener('change', function() {
+                const selected = this.value;
+                const prevSection = document.getElementById('prev-school-section');
+                const prevSchool = document.getElementById('prev-school');
+                const prevYear = document.getElementById('prev-school-year');
+                const prevSectionText = document.getElementById('prev-section-text');
+                const prevSectionSelect = document.getElementById('prev-section-select');
+
+                const showTextSection = () => {
+                    prevSectionText.classList.remove('hidden');
+                    prevSectionText.disabled = false;
+                    prevSectionSelect.classList.add('hidden');
+                    prevSectionSelect.disabled = true;
+                    prevSectionSelect.value = '';
+                };
+
+                const showSelectSection = (options) => {
+                    prevSectionSelect.classList.remove('hidden');
+                    prevSectionSelect.disabled = false;
+                    prevSectionText.classList.add('hidden');
+                    prevSectionText.disabled = true;
+                    prevSectionText.value = '';
+
+                    prevSectionSelect.innerHTML = '<option value="">Select Section...</option>';
+                    if (!Array.isArray(options) || options.length === 0) {
+                        prevSectionSelect.innerHTML = '<option value="">No Grade 10 sections yet</option>';
+                        prevSectionSelect.disabled = true;
+                        return;
+                    }
+
+                    options.forEach(sec => {
+                        const opt = document.createElement('option');
+                        opt.value = sec;
+                        opt.textContent = sec;
+                        prevSectionSelect.appendChild(opt);
+                    });
+                };
+
+                if (selected === 'Transferee') {
+                    prevSection.classList.remove('hidden');
+                    prevSchool.value = '';
+                    prevSchool.readOnly = false;
+                    prevYear.value = '';
+                    prevYear.disabled = false;
+                    prevYear.type = 'text';
+                    showTextSection();
+                } else if (selected === 'Grade 10 DRANHS Student') {
+                    prevSection.classList.remove('hidden');
+                    prevSchool.value = 'Daniel R. Aguinaldo National High School';
+                    prevSchool.readOnly = true;
+                    prevYear.value = PREVIOUS_SCHOOL_YEAR || '2025-2026';
+                    prevYear.disabled = true;
+                    prevYear.type = 'text';
+                    showSelectSection(G10_SECTIONS);
+                } else if (selected === 'Repeater' || selected === 'Balik-Aral(Returnee)') {
+                    prevSection.classList.remove('hidden');
+                    prevSchool.value = 'Daniel R. Aguinaldo National High School';
+                    prevSchool.readOnly = true;
+                    prevYear.value = '';
+                    prevYear.disabled = false;
+                    prevYear.type = 'text';
+                    populateYear(prevYear);
+                    showSelectSection(G11_SECTIONS);
+                } else {
+                    prevSection.classList.add('hidden');
+                    prevSchool.value = '';
+                    prevSchool.readOnly = false;
+                    prevYear.value = '';
+                    prevYear.disabled = true;
+                    showTextSection();
+                }
+            });
+
+            function populateSections(select, sections) {
+                if (!select || select.tagName !== 'SELECT') return;
+                select.innerHTML = '<option value="">Select Section...</option>';
+                sections.forEach(sec => {
+                    const option = document.createElement('option');
+                    option.value = sec;
+                    option.textContent = sec;
+                    select.appendChild(option);
+                });
+            }
+
+            function populateYear(select) {
+                if (!select || select.tagName !== 'SELECT') return;
+                const defaultYear = PREVIOUS_SCHOOL_YEAR || '2025-2026';
+                const yearParts = defaultYear.split('-').map(v => parseInt(v.trim()));
+                let start = yearParts[0] || 2025;
+
+                select.innerHTML = '<option value="">Select Year...</option>';
+                for (let i = 0; i < 6; i++) {
+                    const val = `${start + i}-${start + i + 1}`;
+                    const option = document.createElement('option');
+                    option.value = val;
+                    option.textContent = val;
+                    select.appendChild(option);
+                }
+            }
 
             // Form specific Logic
             initFormLogic('violet');
