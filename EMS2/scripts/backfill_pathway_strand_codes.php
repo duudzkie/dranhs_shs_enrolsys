@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/pathway_strand_catalog.php';
+require_once __DIR__ . '/../pathway_strand_catalog.php';
 
 $db_host = 'localhost';
 $db_user = 'root';

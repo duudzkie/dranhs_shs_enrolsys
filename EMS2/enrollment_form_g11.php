@@ -511,6 +511,8 @@ if (!$conn->connect_error) {
         include 'components/footer.php'; 
     ?>
 
+    <script src="davao-address.js"></script>
+    <script src="form-logic.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             // Pre-fill dropdowns from URL
@@ -643,7 +645,5 @@ if (!$conn->connect_error) {
             initFormLogic('violet');
         });
     </script>
-    <script src="davao-address.js"></script>
-    <script src="form-logic.js"></script>
 </body>
 </html>

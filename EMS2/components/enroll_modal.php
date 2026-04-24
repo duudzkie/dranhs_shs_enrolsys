@@ -4,7 +4,25 @@ if (basename($_SERVER['PHP_SELF']) === 'enroll_modal.php') {
     header('Location: index.php');
     exit;
 }
+
+// Fetch curriculum settings
+$curr_vis_saved = null;
+if (isset($conn) && $conn instanceof mysqli) {
+    $c_res = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'curriculum_structure'");
+    if ($c_res && $c_res->num_rows > 0) {
+        $curr_vis_saved = $c_res->fetch_assoc()['setting_value'];
+    }
+}
+$curriculum_configured = ($curr_vis_saved !== null);
+$curriculum_structure = $curriculum_configured ? json_decode($curr_vis_saved, true) : [];
+
+$js_pathways = ['Academic' => [], 'Tech-Pro' => [], 'ALS' => []];
+
 ?>
+<script>
+    // Export live configured pathways for form-logic.js
+    window.DYNAMIC_PATHWAYS_DATA = <?php echo json_encode($js_pathways); ?>; // Will be properly assembled inside the loops
+</script>
 
 <!-- Enrollment Modal (components/enroll_modal.php) -->
 <div id="enroll-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] hidden flex justify-center items-center opacity-0 transition-opacity duration-300 p-4">
@@ -76,12 +94,17 @@ if (basename($_SERVER['PHP_SELF']) === 'enroll_modal.php') {
                 <div class="max-w-2xl mx-auto flex flex-col gap-6">
                     <!-- Old Student (LRN Input) -->
                     <div class="bg-slate-50 p-6 lg:p-8 rounded-2xl border border-slate-200">
-                        <h3 class="font-bold text-slate-800 text-lg mb-1">Old Student</h3>
-                        <p class="text-xs text-slate-500 mb-5">Please enter your Learner Reference Number (LRN)</p>
-                        <form class="flex flex-col sm:flex-row gap-3" onsubmit="event.preventDefault()">
-                            <input type="text" placeholder="Enter 12-digit LRN" required pattern="[0-9]{12}" title="Please enter a valid 12-digit LRN" class="flex-1 bg-white border border-slate-200 px-4 py-3 rounded-xl focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20 outline-none font-medium shadow-sm transition-all" />
-                            <button type="submit" class="bg-pink-500 hover:bg-pink-600 text-white px-8 py-3 rounded-xl font-bold transition-colors uppercase tracking-wide shadow-md">Verify LRN</button>
+                        <h3 class="font-bold text-slate-800 text-lg mb-1">Old Student (Grade 11 Completer)</h3>
+                        <p class="text-xs text-slate-500 mb-5">Enter your Learner Reference Number (LRN) to verify if you're in the Grade 11 completers list</p>
+                        <form id="g12-lrn-form" class="flex flex-col sm:flex-row gap-3" onsubmit="event.preventDefault()">
+                            <input id="g12-lrn-input" type="text" placeholder="Enter 12-digit LRN" required pattern="[0-9]{12}" title="Please enter a valid 12-digit LRN" class="flex-1 bg-white border border-slate-200 px-4 py-3 rounded-xl focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20 outline-none font-medium shadow-sm transition-all" />
+                            <button type="submit" id="g12-lrn-verify-btn" class="bg-pink-500 hover:bg-pink-600 text-white px-8 py-3 rounded-xl font-bold transition-colors uppercase tracking-wide shadow-md flex items-center gap-2 justify-center">
+                                <svg id="g12-lrn-spinner" class="hidden animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+                                Verify LRN
+                            </button>
                         </form>
+                        <!-- Status message -->
+                        <div id="g12-lrn-status" class="hidden mt-4 p-4 rounded-xl text-sm font-semibold"></div>
                     </div>
                     
                     <div class="flex items-center gap-4 my-2">
@@ -94,8 +117,59 @@ if (basename($_SERVER['PHP_SELF']) === 'enroll_modal.php') {
                     <div class="bg-white p-6 lg:p-8 rounded-2xl border border-slate-200 text-center flex flex-col items-center">
                         <h3 class="font-bold text-slate-800 text-lg mb-1">Transferee / Repeater / Returnee</h3>
                         <p class="text-xs text-slate-500 mb-5">Start a new application if you fall into these categories</p>
-                        <button class="bg-slate-800 hover:bg-slate-900 text-white px-8 py-3.5 rounded-xl font-bold w-full max-w-sm transition-colors uppercase tracking-widest shadow-md">NEW APPLICATION</button>
+                        <button id="g12-new-app-btn" class="bg-slate-800 hover:bg-slate-900 text-white px-8 py-3.5 rounded-xl font-bold w-full max-w-sm transition-colors uppercase tracking-widest shadow-md">NEW APPLICATION</button>
                     </div>
+                </div>
+            </div>
+
+            <!-- ================= VIEW 5: G12 Completer Confirmation ================= -->
+            <div id="view-g12-confirm" class="hidden w-full">
+                <!-- Back Button -->
+                <button id="back-to-g12-form" class="mb-6 text-sm font-bold text-slate-500 hover:text-dranhs-dark uppercase tracking-wide flex items-center gap-2 transition-colors">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                    Back
+                </button>
+
+                <div class="text-center mb-6">
+                    <div class="inline-flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-full text-xs font-black uppercase tracking-widest mb-4">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        Grade 11 Completer Found
+                    </div>
+                    <h2 class="text-3xl lg:text-4xl font-heading font-black text-pink-500 mb-2 uppercase tracking-tight">Confirm Your Details</h2>
+                    <p class="text-slate-500 font-medium text-sm">The following information will be pre-filled and locked in the enrollment form.</p>
+                </div>
+
+                <div class="max-w-2xl mx-auto">
+                    <div class="bg-slate-50 rounded-2xl border border-slate-200 p-6 mb-6 space-y-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <p class="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Learner Reference No. (LRN)</p>
+                                <p id="g12c-lrn" class="text-lg font-black text-slate-800 font-mono tracking-widest"></p>
+                            </div>
+                            <div>
+                                <p class="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Strand</p>
+                                <p id="g12c-strand" class="text-lg font-black text-pink-600 uppercase"></p>
+                            </div>
+                        </div>
+                        <div class="border-t border-slate-200 pt-4">
+                            <p class="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Full Name</p>
+                            <p id="g12c-name" class="text-xl font-black text-slate-800 uppercase"></p>
+                        </div>
+                        <div class="border-t border-slate-200 pt-4">
+                            <p class="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Previous Section</p>
+                            <p id="g12c-section" class="text-base font-bold text-slate-600"></p>
+                        </div>
+                    </div>
+
+                    <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-start gap-3">
+                        <svg class="shrink-0 text-blue-500 mt-0.5" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                        <p class="text-xs text-blue-700 font-semibold leading-relaxed">As a Grade 11 Completer, your name, LRN, and strand are pre-verified &mdash; they will be <strong>locked</strong> in the form and cannot be changed. Your enrollment will go directly to <strong>encoding</strong> without requiring evaluation.</p>
+                    </div>
+
+                    <button id="g12-confirm-proceed-btn" class="bg-pink-600 hover:bg-pink-700 text-white px-10 py-4 rounded-full font-black text-base w-full transition-transform hover:-translate-y-1 shadow-lg uppercase tracking-widest">
+                        PROCEED TO ENROLLMENT FORM
+                        <svg class="inline ml-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                    </button>
                 </div>
             </div>
 
@@ -122,25 +196,15 @@ if (basename($_SERVER['PHP_SELF']) === 'enroll_modal.php') {
                 <!-- Academic Track Content (11 Pathways) -->
                 <div id="content-academic" class="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
                     <?php
-                        $acad_tracks = [
-                            "Medical & Allied Health" => '<path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>',
-                            "Engineering & Aviation" => '<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path><circle cx="12" cy="12" r="3"></circle>',
-                            "Earth, Space & Weather Science" => '<circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>',
-                            "Pre-Law & Public Governance" => '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>',
-                            "Criminology & Uniformed Services" => '<circle cx="12" cy="12" r="10"></circle><line x1="22" y1="12" x2="18" y2="12"></line><line x1="6" y1="12" x2="2" y2="12"></line><line x1="12" y1="6" x2="12" y2="2"></line><line x1="12" y1="22" x2="12" y2="18"></line>',
-                            "Teacher Ed (Lang/Social Sci)" => '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>',
-                            "Social Work & Community Dev." => '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>',
-                            "Digital Media & Creative Arts" => '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle>',
-                            "Accountancy & Financial Mgmt." => '<line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>',
-                            "Entrepreneurship & Innovation" => '<rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>',
-                            "FITNESS AND ATHLETICS DEVELOPMENT" => '<path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line>'
-                        ];
-                        foreach($acad_tracks as $track => $icon) {
-                            echo '<button class="pathway-card relative flex bg-blue-900 border-2 border-transparent rounded-xl p-4 lg:p-5 cursor-pointer hover:border-emerald-400 hover:shadow-lg transition-all group items-center text-left" data-track="Academic" data-pathway="'.$track.'">
+                        $acad_tracks = $curriculum_structure['Academic'] ?? [];
+                        foreach($acad_tracks as $path) {
+                            if (empty($path['enabled'])) continue;
+                            $js_pathways['Academic'][] = $path['name'];
+                            echo '<button class="pathway-card relative flex bg-blue-900 border-2 border-transparent rounded-xl p-4 lg:p-5 cursor-pointer hover:border-emerald-400 hover:shadow-lg transition-all group items-center text-left" data-track="Academic" data-pathway="'.htmlspecialchars($path['name'], ENT_QUOTES).'">
                                 <div class="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mr-4 shrink-0 transition-transform group-hover:scale-110">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'.$icon.'</svg>
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'.($path['icon'] ?? '').'</svg>
                                 </div>
-                                <span class="font-bold text-slate-100 group-hover:text-emerald-300 group-hover:scale-[1.02] transform transition-transform uppercase text-[0.7rem] lg:text-[0.8rem] tracking-wide leading-snug">'.$track.'</span>
+                                <span class="font-bold text-slate-100 group-hover:text-emerald-300 group-hover:scale-[1.02] transform transition-transform uppercase text-[0.7rem] lg:text-[0.8rem] tracking-wide leading-snug">'.htmlspecialchars($path['name']).'</span>
                             </button>';
                         }
                     ?>
@@ -149,18 +213,15 @@ if (basename($_SERVER['PHP_SELF']) === 'enroll_modal.php') {
                 <!-- Tech-Pro Track Content (4 Clusters) -->
                 <div id="content-techpro" class="grid grid-cols-1 md:grid-cols-2 gap-3 w-full hidden">
                     <?php
-                        $tech_tracks = [
-                            "ICT (Computer Systems Servicing)" => '<rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="2" y1="20" x2="22" y2="20"></line>',
-                            "Industrial (Electrical Installation)" => '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>',
-                            "Kitchen Operations (Cookery)" => '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"></path><path d="M7 2v20"></path><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"></path>',
-                            "Aesthetic Services (Beauty Care)" => '<circle cx="6" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><line x1="20" y1="4" x2="8.12" y2="15.88"></line><line x1="14.47" y1="14.48" x2="20" y2="20"></line><line x1="8.12" y1="8.12" x2="12" y2="12"></line>'
-                        ];
-                        foreach($tech_tracks as $track => $icon) {
-                            echo '<button class="pathway-card relative flex bg-amber-50 border-2 border-slate-200 rounded-xl p-4 lg:p-5 cursor-pointer hover:border-orange-500 hover:bg-orange-50 hover:shadow-lg transition-all group items-center text-left" data-track="Tech-Pro" data-pathway="'.$track.'">
+                        $tech_tracks = $curriculum_structure['Tech-Pro'] ?? [];
+                        foreach($tech_tracks as $path) {
+                            if (empty($path['enabled'])) continue;
+                            $js_pathways['Tech-Pro'][] = $path['name'];
+                            echo '<button class="pathway-card relative flex bg-amber-50 border-2 border-slate-200 rounded-xl p-4 lg:p-5 cursor-pointer hover:border-orange-500 hover:bg-orange-50 hover:shadow-lg transition-all group items-center text-left" data-track="Tech-Pro" data-pathway="'.htmlspecialchars($path['name'], ENT_QUOTES).'">
                                 <div class="w-10 h-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center mr-4 shrink-0 transition-transform group-hover:scale-110">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'.$icon.'</svg>
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'.($path['icon'] ?? '').'</svg>
                                 </div>
-                                <span class="font-bold text-orange-900 group-hover:text-orange-700 group-hover:scale-[1.02] transform transition-transform uppercase text-[0.7rem] lg:text-[0.8rem] tracking-wide leading-snug">'.$track.'</span>
+                                <span class="font-bold text-orange-900 group-hover:text-orange-700 group-hover:scale-[1.02] transform transition-transform uppercase text-[0.7rem] lg:text-[0.8rem] tracking-wide leading-snug">'.htmlspecialchars($path['name']).'</span>
                             </button>';
                         }
                     ?>
@@ -169,24 +230,23 @@ if (basename($_SERVER['PHP_SELF']) === 'enroll_modal.php') {
                 <!-- ALS Track Content -->
                 <div id="content-als" class="grid grid-cols-1 md:grid-cols-2 gap-3 w-full hidden">
                     <?php
-                        $als_tracks = [
-                            "ICT (Computer Systems Servicing)" => '<rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="2" y1="20" x2="22" y2="20"></line>',
-                            "Kitchen Operations (Cookery)" => '<path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"></path><path d="M7 2v20"></path><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"></path>',
-                            "Food Processing" => '<path d="M12 2v20"></path><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path><path d="M22 17v2a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-2"></path>' // Adjusting icon for food processing. we will use package/box for now `<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line>`
-                        ];
-                        // Overriding food processing with an actual package icon to represent processed food
-                        $als_tracks["Food Processing"] = '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line>';
-                        
-                        foreach($als_tracks as $track => $icon) {
-                            echo '<button class="pathway-card relative flex bg-rose-50 border-2 border-slate-200 rounded-xl p-4 lg:p-5 cursor-pointer hover:border-rose-500 hover:bg-rose-100 hover:shadow-lg transition-all group items-center text-left" data-track="ALS" data-pathway="'.$track.'">
+                        $als_tracks = $curriculum_structure['ALS'] ?? [];
+                        foreach($als_tracks as $path) {
+                            if (empty($path['enabled'])) continue;
+                            $js_pathways['ALS'][] = $path['name'];
+                            echo '<button class="pathway-card relative flex bg-rose-50 border-2 border-slate-200 rounded-xl p-4 lg:p-5 cursor-pointer hover:border-rose-500 hover:bg-rose-100 hover:shadow-lg transition-all group items-center text-left" data-track="ALS" data-pathway="'.htmlspecialchars($path['name'], ENT_QUOTES).'">
                                 <div class="w-10 h-10 rounded-full bg-rose-200 text-rose-600 flex items-center justify-center mr-4 shrink-0 transition-transform group-hover:scale-110">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'.$icon.'</svg>
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'.($path['icon'] ?? '').'</svg>
                                 </div>
-                                <span class="font-bold text-rose-900 group-hover:text-rose-700 group-hover:scale-[1.02] transform transition-transform uppercase text-[0.7rem] lg:text-[0.8rem] tracking-wide leading-snug">'.$track.'</span>
+                                <span class="font-bold text-rose-900 group-hover:text-rose-700 group-hover:scale-[1.02] transform transition-transform uppercase text-[0.7rem] lg:text-[0.8rem] tracking-wide leading-snug">'.htmlspecialchars($path['name']).'</span>
                             </button>';
                         }
                     ?>
                 </div>
+                <!-- Re-inject updated JS Pathways -->
+                <script>
+                    window.DYNAMIC_PATHWAYS_DATA = <?php echo json_encode($js_pathways); ?>;
+                </script>
             </div>
 
             <!-- ================= VIEW 4: Pathway Details ================= -->

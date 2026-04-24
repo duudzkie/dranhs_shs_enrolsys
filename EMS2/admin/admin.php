@@ -14,18 +14,31 @@ $username = $_SESSION['username'] ?? 'User';
 $page = isset($_GET['page']) ? $_GET['page'] : 'dashboard';
 $page_title = ucfirst($page);
 
-// Whitelist of allowed pages
-$allowed_pages = [
-    'dashboard', 
-    'student', 
-    'classroom', 
-    'evaluation', 
-    'encode', 
-    'list', 
-    'account', 
-    'logs', 
-    'system_settings'
-];
+// Whitelist of allowed pages based on role
+if ($userRole === 'evaluator') {
+    $allowed_pages = ['dashboard', 'student', 'evaluation'];
+} elseif ($userRole === 'encoder') {
+    $allowed_pages = ['dashboard', 'student', 'encode', 'classroom'];
+} else {
+    // Admin or default
+    $allowed_pages = [
+        'dashboard', 
+        'student', 
+        'classroom', 
+        'evaluation', 
+        'encode', 
+        'list', 
+        'account', 
+        'logs', 
+        'system_settings'
+    ];
+}
+
+// Redirect back to dashboard if trying to access unauthorized page
+if (!in_array($page, $allowed_pages)) {
+    $page = 'dashboard';
+    $page_title = ucfirst($page);
+}
 
 // Active link classes
 $activeClasses = 'bg-dranhs-green text-white shadow-md';
@@ -97,64 +110,84 @@ $inactiveClasses = 'text-slate-300 hover:bg-slate-800 hover:text-white';
         <div class="flex-1 overflow-y-auto sidebar-scroll py-6 px-3 space-y-1">
             
             <!-- Dashboard -->
+            <?php if (in_array('dashboard', $allowed_pages)): ?>
             <a href="?page=dashboard" class="flex items-center gap-3 px-3 py-2.5 rounded-lg group transition-all <?php echo ($page === 'dashboard') ? $activeClasses : $inactiveClasses; ?>">
                 <svg class="w-5 h-5 <?php echo ($page === 'dashboard') ? '' : 'text-slate-400 group-hover:text-white'; ?>" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
                 <span class="font-medium text-sm">Dashboard</span>
             </a>
+            <?php endif; ?>
 
             <!-- Section Label -->
             <div class="px-3 mt-6 mb-2 text-xs font-bold text-slate-500 uppercase tracking-wider">Academic Management</div>
 
             <!-- Student -->
+            <?php if (in_array('student', $allowed_pages)): ?>
             <a href="?page=student" class="flex items-center gap-3 px-3 py-2.5 rounded-lg group transition-colors <?php echo ($page === 'student') ? $activeClasses : $inactiveClasses; ?>">
                 <svg class="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
                 <span class="font-medium text-sm">Student</span>
             </a>
-
-            <!-- Classroom -->
-            <a href="?page=classroom" class="flex items-center gap-3 px-3 py-2.5 rounded-lg group transition-colors <?php echo ($page === 'classroom') ? $activeClasses : $inactiveClasses; ?>">
-                <svg class="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z"></path></svg>
-                <span class="font-medium text-sm">Classroom</span>
-            </a>
+            <?php endif; ?>
 
             <!-- Evaluation -->
+            <?php if (in_array('evaluation', $allowed_pages)): ?>
             <a href="?page=evaluation" class="flex items-center gap-3 px-3 py-2.5 rounded-lg group transition-colors <?php echo ($page === 'evaluation') ? $activeClasses : $inactiveClasses; ?>">
                 <svg class="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
                 <span class="font-medium text-sm">Evaluation</span>
             </a>
+            <?php endif; ?>
 
             <!-- Encode -->
+            <?php if (in_array('encode', $allowed_pages)): ?>
             <a href="?page=encode" class="flex items-center gap-3 px-3 py-2.5 rounded-lg group transition-colors <?php echo ($page === 'encode') ? $activeClasses : $inactiveClasses; ?>">
                 <svg class="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
-                <span class="font-medium text-sm">Encode Grades</span>
+                <span class="font-medium text-sm">Encode</span>
             </a>
+            <?php endif; ?>
+
+            <!-- Classroom -->
+            <?php if (in_array('classroom', $allowed_pages)): ?>
+            <a href="?page=classroom" class="flex items-center gap-3 px-3 py-2.5 rounded-lg group transition-colors <?php echo ($page === 'classroom') ? $activeClasses : $inactiveClasses; ?>">
+                <svg class="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z"></path></svg>
+                <span class="font-medium text-sm">Classroom</span>
+            </a>
+            <?php endif; ?>
 
             <!-- List -->
+            <?php if (in_array('list', $allowed_pages)): ?>
             <a href="?page=list" class="flex items-center gap-3 px-3 py-2.5 rounded-lg group transition-colors <?php echo ($page === 'list') ? $activeClasses : $inactiveClasses; ?>">
                 <svg class="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>
-                <span class="font-medium text-sm">Master List</span>
+                <span class="font-medium text-sm">List</span>
             </a>
+            <?php endif; ?>
 
+            <?php if (in_array('account', $allowed_pages) || in_array('logs', $allowed_pages) || in_array('system_settings', $allowed_pages)): ?>
             <!-- Section Label -->
             <div class="px-3 mt-6 mb-2 text-xs font-bold text-slate-500 uppercase tracking-wider">Section</div>
+            <?php endif; ?>
 
             <!-- Accounts -->
+            <?php if (in_array('account', $allowed_pages)): ?>
             <a href="?page=account" class="flex items-center gap-3 px-3 py-2.5 rounded-lg group transition-colors <?php echo ($page === 'account') ? $activeClasses : $inactiveClasses; ?>">
                 <svg class="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
                 <span class="font-medium text-sm">Accounts</span>
             </a>
+            <?php endif; ?>
 
             <!-- Logs -->
+            <?php if (in_array('logs', $allowed_pages)): ?>
             <a href="?page=logs" class="flex items-center gap-3 px-3 py-2.5 rounded-lg group transition-colors <?php echo ($page === 'logs') ? $activeClasses : $inactiveClasses; ?>">
                 <svg class="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                 <span class="font-medium text-sm">Logs</span>
             </a>
+            <?php endif; ?>
 
             <!-- System Settings -->
+            <?php if (in_array('system_settings', $allowed_pages)): ?>
             <a href="?page=system_settings" class="flex items-center gap-3 px-3 py-2.5 rounded-lg group transition-colors <?php echo ($page === 'system_settings') ? $activeClasses : $inactiveClasses; ?>">
                 <svg class="w-5 h-5 text-slate-400 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                 <span class="font-medium text-sm">System Settings</span>
             </a>
+            <?php endif; ?>
         </div>
 
         <!-- User Info Footer -->
@@ -203,14 +236,11 @@ $inactiveClasses = 'text-slate-300 hover:bg-slate-800 hover:text-white';
             <?php
                 // Include page content based on the 'page' parameter
                 if (in_array($page, $allowed_pages)) {
-                    $page_path = $page . '.php';
+                    $page_path = __DIR__ . DIRECTORY_SEPARATOR . $page . '.php';
                     if (file_exists($page_path)) {
                         include $page_path;
                     } else {
-                        echo '<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">';
-                        echo '<strong class="font-bold">Error:</strong>';
-                        echo '<span class="block sm:inline"> File not found: ' . $page_path . '</span>';
-                        echo '</div>';
+                        echo '<p class="text-red-600 font-bold p-4">File not found: ' . htmlspecialchars($page_path) . '</p>';
                     }
                 } else {
                     echo '<div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">';

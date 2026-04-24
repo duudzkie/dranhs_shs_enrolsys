@@ -14,7 +14,10 @@
     { "track": "Tech-Pro", "label": "ICT (Computer Systems Servicing)", "code": "ict_css" },
     { "track": "Tech-Pro", "label": "Industrial (Electrical Installation)", "code": "indus_eim" },
     { "track": "Tech-Pro", "label": "Kitchen Operations (Cookery)", "code": "kitchen_cookery" },
-    { "track": "Tech-Pro", "label": "Aesthetic Services (Beauty Care)", "code": "aesthetic_beauty" }
+    { "track": "Tech-Pro", "label": "Aesthetic Services (Beauty Care)", "code": "aesthetic_beauty" },
+    { "track": "ALS", "label": "ALS - ICT (Computer Systems Servicing)", "code": "als_ict_css" },
+    { "track": "ALS", "label": "ALS - Kitchen Operations (Cookery)", "code": "als_kitchen_cookery" },
+    { "track": "ALS", "label": "ALS - Food Processing", "code": "als_food_processing" }
   ],
   "grade_12": [
     { "track": "Academic", "label": "ABM", "code": "abm" },

@@ -65,6 +65,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $toast_message = 'Room successfully assigned!';
             $toast_type = 'success';
         }
+        elseif ($_POST['action'] === 'save_curriculum') {
+            $vis = isset($_POST['cv']) ? $_POST['cv'] : [];
+            
+            // Process cv payload from complex array structure
+            foreach ($vis as $track => &$pathways) {
+                foreach ($pathways as $id => &$p) {
+                    $p['enabled'] = isset($p['enabled']) ? true : false;
+                }
+            }
+            // Re-index arrays to ensure JSON encodes them as arrays instead of objects
+            $final_structure = [
+                'Academic' => array_values($vis['Academic'] ?? []),
+                'Tech-Pro' => array_values($vis['Tech-Pro'] ?? []),
+                'ALS'      => array_values($vis['ALS'] ?? [])
+            ];
+            
+            $vis_json = json_encode($final_structure);
+            
+            $stmt = $conn->prepare("UPDATE system_settings SET setting_value = ? WHERE setting_key = 'curriculum_structure'");
+            $stmt->bind_param("s", $vis_json);
+            $stmt->execute();
+            if ($stmt->affected_rows === 0) {
+                $check = $conn->query("SELECT setting_key FROM system_settings WHERE setting_key = 'curriculum_structure'");
+                if ($check->num_rows === 0) {
+                    $insert = $conn->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('curriculum_structure', ?)");
+                    $insert->bind_param("s", $vis_json);
+                    $insert->execute();
+                    $insert->close();
+                }
+            }
+            $stmt->close();
+            
+            $toast_message = 'Curriculum Matrix updated!';
+            $toast_type = 'success';
+        }
         elseif ($_POST['action'] === 'add_registry') {
             $cat = $_POST['category'];
             $name = trim(strtoupper($_POST['name']));
@@ -117,6 +152,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
+        elseif ($_POST['action'] === 'retrieve_student') {
+            $sid = intval($_POST['student_id'] ?? 0);
+            if ($sid > 0) {
+                $stmt = $conn->prepare("UPDATE students SET enrollment_status = 'for_evaluation' WHERE id = ? AND enrollment_status = 'withdrawn'");
+                $stmt->bind_param("i", $sid);
+                $stmt->execute();
+                $stmt->close();
+                $toast_message = 'Student retrieved and moved back to evaluation.';
+                $toast_type = 'success';
+            }
+        }
+        elseif ($_POST['action'] === 'delete_student') {
+            $sid = intval($_POST['student_id'] ?? 0);
+            $pwd = $_POST['confirm_password'] ?? '';
+            $uid = $_SESSION['user_id'] ?? 0;
+            $ok = false;
+            if ($uid) {
+                $s = $conn->prepare("SELECT password FROM users WHERE id=?");
+                if ($s) { $s->bind_param("i",$uid); $s->execute(); $r=$s->get_result()->fetch_assoc(); $s->close(); $ok = $r && password_verify($pwd,$r['password']); }
+            }
+            if ($ok && $sid > 0) {
+                $stmt = $conn->prepare("DELETE FROM students WHERE id = ? AND enrollment_status = 'withdrawn'");
+                $stmt->bind_param("i", $sid);
+                $stmt->execute();
+                $stmt->close();
+                $toast_message = 'Student record permanently deleted.';
+                $toast_type = 'success';
+            } else {
+                $toast_message = 'Incorrect password. Student was not deleted.';
+                $toast_type = 'error';
+            }
+        }
         elseif ($_POST['action'] === 'delete_registry') {
             $id = intval($_POST['id']);
             $cat = $_POST['category'] ?? '';
@@ -161,6 +228,11 @@ if ($res) {
         $settings[$row['setting_key']] = $row['setting_value'];
     }
 }
+
+// Fetch withdrawn students
+$withdrawn_students = [];
+$wr = $conn->query("SELECT id, lrn, last_name, first_name, middle_name, extension_name, grade_level, track, pathway_strand, created_at FROM students WHERE enrollment_status = 'withdrawn' ORDER BY last_name, first_name");
+if ($wr) { while ($r = $wr->fetch_assoc()) $withdrawn_students[] = $r; $wr->close(); }
 
 // Fetch Advisers and Sections
 $registries = [
@@ -231,9 +303,12 @@ function getRoomAssignment($roomNumber, $registries) {
         <button onclick="switchTab('main-settings')" id="tab-btn-main-settings" class="tab-btn px-6 py-4 font-bold text-sm text-dranhs-green border-b-2 border-dranhs-green bg-white shrink-0">Main Settings</button>
         <button onclick="switchTab('registries')" id="tab-btn-registries" class="tab-btn px-6 py-4 font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors shrink-0">Section</button>
         <button onclick="switchTab('room-assignment')" id="tab-btn-room-assignment" class="tab-btn px-6 py-4 font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors shrink-0 flex items-center gap-2">Room Assignment</button>
+        <button onclick="switchTab('withdrawn')" id="tab-btn-withdrawn" class="tab-btn px-6 py-4 font-bold text-sm text-slate-500 hover:text-red-600 hover:bg-slate-50 transition-colors shrink-0 flex items-center gap-2">
+            Withdrawn Students
+        </button>
         <button class="px-6 py-4 font-bold text-sm text-slate-400 cursor-not-allowed shrink-0 flex items-center gap-2">Theme <span class="bg-slate-200 text-slate-500 text-[10px] px-1.5 py-0.5 rounded-md uppercase tracking-wide">Soon</span></button>
-        <button class="px-6 py-4 font-bold text-sm text-slate-400 cursor-not-allowed shrink-0 flex items-center gap-2">Curriculum <span class="bg-slate-200 text-slate-500 text-[10px] px-1.5 py-0.5 rounded-md uppercase tracking-wide">Soon</span></button>
-        <button class="px-6 py-4 font-bold text-sm text-slate-400 cursor-not-allowed shrink-0 flex items-center gap-2">Data Hub <span class="bg-slate-200 text-slate-500 text-[10px] px-1.5 py-0.5 rounded-md uppercase tracking-wide">Soon</span></button>
+        <button onclick="switchTab('curriculum')" id="tab-btn-curriculum" class="tab-btn px-6 py-4 font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors shrink-0 flex items-center gap-2">Curriculum</button>
+        <button onclick="switchTab('datahub')" id="tab-btn-datahub" class="tab-btn px-6 py-4 font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors shrink-0 flex items-center gap-2">Data Hub</button>
     </div>
 
     <div class="flex-1 p-6 lg:p-8">
@@ -391,7 +466,6 @@ function getRoomAssignment($roomNumber, $registries) {
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-8">
                 <?php 
                 $dirs = [
-                    'g10_sections' => ['title' => 'Grade 10 Directory', 'color' => 'emerald'],
                     'g11_sections' => ['title' => 'Grade 11 Directory', 'color' => 'blue'],
                     'g12_sections' => ['title' => 'Grade 12 Directory', 'color' => 'pink']
                 ];
@@ -443,7 +517,286 @@ function getRoomAssignment($roomNumber, $registries) {
             </div>
 
         </div> <!-- END TAB ROOM ASSIGNMENT -->
+
+        <!-- CURRICULUM TAB -->
+        <div id="tab-curriculum" class="tab-content hidden">
+            <div class="flex items-center justify-between mb-8">
+                <div class="flex flex-col gap-1">
+                    <div class="flex items-center gap-2">
+                        <svg class="w-6 h-6 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                        <h2 class="text-2xl font-heading font-black text-dranhs-dark uppercase tracking-tight">Curriculum Visibility Mapping</h2>
+                    </div>
+                    <p class="text-sm font-bold text-slate-400 tracking-widest uppercase">Select which career pathways are active for Grade 11</p>
+                </div>
+            </div>
+
+            <?php
+            $curr_vis_saved = $settings['curriculum_structure'] ?? null;
+            $curriculum_configured = ($curr_vis_saved !== null);
+            $curr_vis = $curriculum_configured ? json_decode($curr_vis_saved, true) : [];
+            
+            $all_pathways = [
+                'Academic' => $curr_vis['Academic'] ?? [],
+                'Tech-Pro' => $curr_vis['Tech-Pro'] ?? [],
+                'ALS' => $curr_vis['ALS'] ?? []
+            ];
+            
+            $track_colors = [
+                'Academic' => 'emerald',
+                'Tech-Pro' => 'orange',
+                'ALS' => 'rose'
+            ];
+            ?>
+
+            <form action="?page=system_settings" method="POST" class="space-y-8" id="curriculumForm">
+                <input type="hidden" name="action" value="save_curriculum">
+                
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                    <?php foreach ($all_pathways as $track => $path): $color = $track_colors[$track]; ?>
+                    <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-full" id="track-container-<?php echo $track; ?>">
+                        <div class="border-b-2 <?php echo 'border-'.$color.'-200'; ?> mb-4 pb-2 flex justify-between items-center shrink-0">
+                            <h3 class="text-sm font-black uppercase tracking-[0.1em] <?php echo 'text-'.$color.'-600'; ?> flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full <?php echo 'bg-'.$color.'-500'; ?> shrink-0"></span>
+                                <?php echo htmlspecialchars($track); ?> Track
+                            </h3>
+                            <button type="button" onclick="addPathwayRow('<?php echo htmlspecialchars($track, ENT_QUOTES); ?>', '<?php echo $color; ?>')" class="text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-<?php echo $color; ?>-600 transition-colors flex items-center gap-1 bg-slate-50 hover:bg-<?php echo $color; ?>-50 px-2 py-1 rounded-md">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4"></path></svg> Add
+                            </button>
+                        </div>
+                        <div class="space-y-3 lg:max-h-[300px] overflow-y-auto sidebar-scroll pr-2 flex-grow" id="list-<?php echo htmlspecialchars($track, ENT_QUOTES); ?>">
+                            <?php foreach ($path as $idx => $pathway): 
+                                $uid = uniqid(); 
+                                $escaped_track = htmlspecialchars($track, ENT_QUOTES);
+                                $checked = (!empty($pathway['enabled'])) ? 'checked' : '';
+                            ?>
+                            <div class="flex items-center group bg-white border border-slate-100 p-2 rounded-xl transition-all hover:border-slate-300 gap-2 relative">
+                                <!-- Hidden input for icon -->
+                                <input type="hidden" name="cv[<?php echo $escaped_track; ?>][<?php echo $uid; ?>][icon]" value="<?php echo htmlspecialchars($pathway['icon'] ?? '', ENT_QUOTES); ?>">
+                                <!-- Name Input -->
+                                <input type="text" name="cv[<?php echo $escaped_track; ?>][<?php echo $uid; ?>][name]" value="<?php echo htmlspecialchars($pathway['name'] ?? '', ENT_QUOTES); ?>" class="flex-1 text-xs font-bold text-slate-700 uppercase tracking-wide bg-transparent border-none outline-none focus:ring-2 focus:ring-<?php echo $color; ?>-200 rounded px-1 w-full truncate" required>
+                                
+                                <div class="flex items-center gap-3 shrink-0">
+                                    <label class="relative inline-flex items-center cursor-pointer" title="Toggle Visibility">
+                                        <input type="checkbox" name="cv[<?php echo $escaped_track; ?>][<?php echo $uid; ?>][enabled]" value="1" class="sr-only peer" <?php echo $checked; ?>>
+                                        <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all <?php echo 'peer-checked:bg-'.$color.'-500'; ?>"></div>
+                                    </label>
+                                    <button type="button" onclick="this.closest('.group').remove()" class="text-slate-300 hover:text-red-500 transition-colors p-1 rounded-md hover:bg-red-50" title="Delete Pathway">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <?php endforeach; ?>
+                            <?php if(empty($path)): ?>
+                            <div class="text-[10px] uppercase tracking-widest text-slate-400 font-bold text-center py-4 border-2 border-dashed border-slate-200 rounded-xl empty-msg">No pathways added</div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+
+                <div class="flex justify-end pt-4 border-t border-slate-100 mt-6">
+                    <button type="submit" class="bg-dranhs-dark hover:bg-slate-800 text-white font-bold py-3 px-8 rounded-lg shadow-md transition-transform hover:-translate-y-0.5 tracking-wider uppercase text-sm">Save Curriculum Matrix</button>
+                </div>
+            </form>
+
+            <script>
+            function addPathwayRow(track, color) {
+                const list = document.getElementById('list-' + track);
+                const uid = 'new_' + Math.random().toString(36).substr(2, 9);
+                // Default generic book icon
+                const defaultIcon = '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>';
+                
+                // Clear the "No pathways added" message
+                const emptyMsg = list.querySelector('.empty-msg');
+                if(emptyMsg) emptyMsg.remove();
+
+                const rowHtml = `
+                    <div class="flex items-center group bg-blue-50 border border-blue-200 p-2 rounded-xl transition-all hover:border-blue-400 gap-2 relative animate-pulse" style="animation-iteration-count: 2;">
+                        <input type="hidden" name="cv[${track}][${uid}][icon]" value='${defaultIcon}'>
+                        <input type="text" name="cv[${track}][${uid}][name]" placeholder="Enter Pathway Name..." class="flex-1 text-xs font-black text-slate-800 uppercase tracking-wide bg-transparent border-none outline-none focus:ring-2 focus:ring-${color}-300 rounded px-1 w-full" required autofocus>
+                        
+                        <div class="flex items-center gap-3 shrink-0">
+                            <label class="relative inline-flex items-center cursor-pointer" title="Toggle Visibility">
+                                <input type="checkbox" name="cv[${track}][${uid}][enabled]" value="1" class="sr-only peer" checked>
+                                <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-${color}-500"></div>
+                            </label>
+                            <button type="button" onclick="this.closest('.group').remove()" class="text-slate-400 hover:text-red-500 transition-colors p-1 rounded-md hover:bg-red-50">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                list.insertAdjacentHTML('beforeend', rowHtml);
+                const input = list.lastElementChild.querySelector('input[type="text"]');
+                if (input) input.focus();
+            }
+            </script>
+        </div>
+
+        <!-- WITHDRAWN STUDENTS TAB -->
+        <div id="tab-withdrawn" class="tab-content hidden">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h2 class="text-2xl font-heading font-black text-dranhs-dark">Withdrawn Students</h2>
+                    <p class="text-sm text-slate-500 mt-1">These students have been withdrawn. Retrieve to send back to evaluation, or permanently delete.</p>
+                </div>
+                <span class="px-3 py-1.5 bg-red-100 text-red-700 rounded-full text-xs font-black uppercase tracking-wider"><?php echo count($withdrawn_students); ?> withdrawn</span>
+            </div>
+
+            <?php if (empty($withdrawn_students)): ?>
+                <div class="text-center py-16 bg-slate-50 rounded-2xl border border-slate-200">
+                    <svg class="w-12 h-12 text-slate-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    <p class="text-sm font-semibold text-slate-500">No withdrawn students.</p>
+                </div>
+            <?php else: ?>
+            <div class="overflow-x-auto rounded-2xl border border-slate-200">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead class="bg-slate-50 text-xs uppercase text-slate-500 font-bold">
+                        <tr>
+                            <th class="px-5 py-3">Name</th>
+                            <th class="px-5 py-3">LRN</th>
+                            <th class="px-5 py-3">Grade Level</th>
+                            <th class="px-5 py-3">Track</th>
+                            <th class="px-5 py-3">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        <?php foreach ($withdrawn_students as $ws):
+                            $wname = ($ws['last_name']??'').', '.($ws['first_name']??'');
+                            if (!empty($ws['middle_name'])) $wname .= ' '.strtoupper(substr($ws['middle_name'],0,1)).'.';
+                            if (!empty($ws['extension_name'])) $wname .= ' '.$ws['extension_name'];
+                        ?>
+                        <tr class="hover:bg-slate-50 transition-colors">
+                            <td class="px-5 py-4 font-semibold text-slate-700"><?php echo htmlspecialchars($wname); ?></td>
+                            <td class="px-5 py-4 text-slate-500"><?php echo htmlspecialchars($ws['lrn'] ?: '--'); ?></td>
+                            <td class="px-5 py-4 text-slate-500"><?php echo htmlspecialchars($ws['grade_level'] ?: '--'); ?></td>
+                            <td class="px-5 py-4 text-slate-500"><?php echo htmlspecialchars($ws['track'] ?: '--'); ?></td>
+                            <td class="px-5 py-4">
+                                <div class="flex items-center gap-2">
+                                    <!-- Retrieve -->
+                                    <form method="POST" action="?page=system_settings" class="inline">
+                                        <input type="hidden" name="action" value="retrieve_student">
+                                        <input type="hidden" name="student_id" value="<?php echo (int)$ws['id']; ?>">
+                                        <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold hover:bg-emerald-100 transition-colors border border-emerald-200">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                            Retrieve
+                                        </button>
+                                    </form>
+                                    <!-- Delete -->
+                                    <button type="button"
+                                        class="wd-delete-btn inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-50 text-red-600 text-xs font-bold hover:bg-red-100 transition-colors border border-red-200"
+                                        data-id="<?php echo (int)$ws['id']; ?>"
+                                        data-name="<?php echo htmlspecialchars($wname, ENT_QUOTES); ?>">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3m-7 0h8"/></svg>
+                                        Delete
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <?php endif; ?>
+        </div>
+
+        <!-- Delete confirm modal -->
+        <div id="wd-delete-modal" class="fixed inset-0 z-50 hidden">
+            <div class="absolute inset-0 bg-slate-900/60" id="wd-del-backdrop"></div>
+            <div class="relative z-10 min-h-screen flex items-center justify-center p-4">
+                <div class="w-full max-w-sm bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+                    <div class="bg-red-600 px-6 py-4 flex items-center justify-between">
+                        <h3 class="font-heading font-black text-lg text-white">Permanently Delete</h3>
+                        <button type="button" id="wd-del-close" class="w-9 h-9 rounded-full bg-white/10 text-white hover:bg-white/20 text-xl flex items-center justify-center">&times;</button>
+                    </div>
+                    <form method="POST" action="?page=system_settings" class="p-6 space-y-4">
+                        <input type="hidden" name="action" value="delete_student">
+                        <input type="hidden" name="student_id" id="wd-del-student-id">
+                        <p class="text-sm text-slate-600">Permanently delete <span id="wd-del-student-name" class="font-bold text-red-600"></span>? This cannot be undone.</p>
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Confirm Password</label>
+                            <input type="password" name="confirm_password" class="w-full bg-white border-2 border-slate-300 px-4 py-3 rounded-xl text-sm font-medium focus:border-red-500 outline-none" required placeholder="Enter your password">
+                        </div>
+                        <div class="flex justify-end gap-3">
+                            <button type="button" id="wd-del-cancel" class="px-5 py-2.5 rounded-xl border-2 border-slate-300 text-slate-600 font-bold text-sm hover:bg-slate-50">Cancel</button>
+                            <button type="submit" class="px-5 py-2.5 rounded-xl bg-red-600 text-white font-bold text-sm hover:bg-red-700 shadow-md">Delete Forever</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <script>
+        document.querySelectorAll('.wd-delete-btn').forEach(btn => btn.addEventListener('click', function () {
+            document.getElementById('wd-del-student-id').value = this.dataset.id;
+            document.getElementById('wd-del-student-name').textContent = this.dataset.name;
+            document.getElementById('wd-delete-modal').classList.remove('hidden');
+        }));
+        document.getElementById('wd-del-close').addEventListener('click', function () { document.getElementById('wd-delete-modal').classList.add('hidden'); });
+        document.getElementById('wd-del-cancel').addEventListener('click', function () { document.getElementById('wd-delete-modal').classList.add('hidden'); });
+        document.getElementById('wd-del-backdrop').addEventListener('click', function () { document.getElementById('wd-delete-modal').classList.add('hidden'); });
+        </script>
         
+        <!-- DATA HUB TAB -->
+        <div id="tab-datahub" class="tab-content hidden">
+            <div class="flex items-center gap-2 mb-2">
+                <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                <h2 class="text-2xl font-heading font-black text-dranhs-dark uppercase tracking-tight">Data Hub — Export Reports</h2>
+            </div>
+            <p class="text-sm text-slate-500 mb-8">Download enrollment reports as Excel (.xlsx) files. All data is filtered by the current school year.</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                <!-- 1. Enrollment Summary -->
+                <a href="export_report.php?report=enrollment_summary" class="group bg-white border-2 border-slate-200 hover:border-emerald-400 rounded-2xl p-6 transition-all hover:shadow-lg hover:-translate-y-0.5">
+                    <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-4 group-hover:bg-emerald-100 transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                    </div>
+                    <h3 class="font-black text-sm text-dranhs-dark uppercase tracking-wider mb-1">Enrollment Summary</h3>
+                    <p class="text-xs text-slate-400">Dashboard stats, G11 pathways, G12 strands, student types, and daily enrollment — all with gender breakdown.</p>
+                    <span class="inline-flex items-center gap-1 mt-3 text-[10px] font-bold text-emerald-600 uppercase tracking-widest"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> 5 Sheets</span>
+                </a>
+
+                <!-- 2. Student Master List -->
+                <a href="export_report.php?report=student_masterlist" class="group bg-white border-2 border-slate-200 hover:border-blue-400 rounded-2xl p-6 transition-all hover:shadow-lg hover:-translate-y-0.5">
+                    <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4 group-hover:bg-blue-100 transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    </div>
+                    <h3 class="font-black text-sm text-dranhs-dark uppercase tracking-wider mb-1">Student Master List</h3>
+                    <p class="text-xs text-slate-400">Complete list of all active students with LRN, name, grade, track, pathway/strand, contact info, and enrollment date.</p>
+                    <span class="inline-flex items-center gap-1 mt-3 text-[10px] font-bold text-blue-600 uppercase tracking-widest"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> 1 Sheet</span>
+                </a>
+
+                <!-- 3. Classroom Master List -->
+                <a href="export_report.php?report=classroom_masterlist" class="group bg-white border-2 border-slate-200 hover:border-violet-400 rounded-2xl p-6 transition-all hover:shadow-lg hover:-translate-y-0.5">
+                    <div class="w-12 h-12 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center mb-4 group-hover:bg-violet-100 transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z"></path></svg>
+                    </div>
+                    <h3 class="font-black text-sm text-dranhs-dark uppercase tracking-wider mb-1">Classroom Master List</h3>
+                    <p class="text-xs text-slate-400">One sheet per section with numbered student roster, sorted by sex then last name.</p>
+                    <span class="inline-flex items-center gap-1 mt-3 text-[10px] font-bold text-violet-600 uppercase tracking-widest"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> Multi-Sheet</span>
+                </a>
+
+                <!-- 4. Withdrawn Students -->
+                <a href="export_report.php?report=withdrawn_list" class="group bg-white border-2 border-slate-200 hover:border-red-400 rounded-2xl p-6 transition-all hover:shadow-lg hover:-translate-y-0.5">
+                    <div class="w-12 h-12 rounded-xl bg-red-50 text-red-600 flex items-center justify-center mb-4 group-hover:bg-red-100 transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3m-7 0h8"></path></svg>
+                    </div>
+                    <h3 class="font-black text-sm text-dranhs-dark uppercase tracking-wider mb-1">Withdrawn Students</h3>
+                    <p class="text-xs text-slate-400">List of all withdrawn students with their original enrollment details.</p>
+                    <span class="inline-flex items-center gap-1 mt-3 text-[10px] font-bold text-red-600 uppercase tracking-widest"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> 1 Sheet</span>
+                </a>
+
+                <!-- 5. Gender Analysis -->
+                <a href="export_report.php?report=gender_report" class="group bg-white border-2 border-slate-200 hover:border-pink-400 rounded-2xl p-6 transition-all hover:shadow-lg hover:-translate-y-0.5">
+                    <div class="w-12 h-12 rounded-xl bg-pink-50 text-pink-600 flex items-center justify-center mb-4 group-hover:bg-pink-100 transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                    </div>
+                    <h3 class="font-black text-sm text-dranhs-dark uppercase tracking-wider mb-1">Gender Analysis</h3>
+                    <p class="text-xs text-slate-400">Gender breakdown by grade level, G11 pathway, G12 strand, and student type.</p>
+                    <span class="inline-flex items-center gap-1 mt-3 text-[10px] font-bold text-pink-600 uppercase tracking-widest"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg> 4 Sheets</span>
+                </a>
+            </div>
+        </div>
+
     </div>
 </div>
 
