@@ -17,6 +17,20 @@ function post_value($key, $default = null) {
     return isset($_POST[$key]) ? $_POST[$key] : $default;
 }
 
+function fetch_current_school_year($conn) {
+    $default_year = date('Y') . ' - ' . (date('Y') + 1);
+    $stmt = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'academic_year' LIMIT 1");
+    if (!$stmt) return $default_year;
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $value = $default_year;
+    if ($result && ($row = $result->fetch_assoc())) {
+        $value = trim((string)($row['setting_value'] ?? '')) ?: $default_year;
+    }
+    $stmt->close();
+    return $value;
+}
+
 // Function to compress and resize image
 function compressImage($source, $destination, $quality = 80, $maxWidth = 800, $maxHeight = 800) {
     $info = getimagesize($source);
@@ -131,6 +145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $pwd_id = post_value('pwd_id', '');
 
     $grade_level = post_value('grade_level', '');
+    $current_school_year = fetch_current_school_year($conn);
 
     // Pathway/strand normalization (Grade 12 uses strand, Grade 11 uses pathway)
     $track = post_value('track', '');
@@ -138,6 +153,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $strand = post_value('strand', '');
     $selected_pathway_strand = strcasecmp($grade_level, 'Grade 12') === 0 ? $strand : $pathway;
     $pathway_strand = get_pathway_strand_code($grade_level, $selected_pathway_strand);
+
+    if (strcasecmp($grade_level, 'Grade 11') === 0) {
+        $stem_pathways = [
+            'Medical & Allied Health',
+            'Engineering & Aviation',
+            'Earth, Space & Weather Science',
+        ];
+
+        if (in_array($selected_pathway_strand, $stem_pathways, true)) {
+            $stem_check = $conn->prepare("SELECT id FROM stem_qualifiers WHERE lrn = ? AND school_year = ? LIMIT 1");
+            if ($stem_check) {
+                $stem_check->bind_param("ss", $_POST['lrn'], $current_school_year);
+                $stem_check->execute();
+                $stem_check->store_result();
+                $is_stem_qualified = $stem_check->num_rows > 0;
+                $stem_check->close();
+
+                if (!$is_stem_qualified) {
+                    die("Error: You are not in the STEM qualifiers list. STEM pathways are only available to qualified students.");
+                }
+            }
+        }
+    }
+
+    $student_type = post_value('student_type', '');
+    if (strcasecmp($grade_level, 'Grade 12') === 0 && $student_type === 'Old Student (Grade 11 Completer)') {
+        $g11_check = $conn->prepare("SELECT strand FROM g11_completers WHERE lrn = ? AND school_year = ? LIMIT 1");
+        if ($g11_check) {
+            $g11_check->bind_param("ss", $_POST['lrn'], $current_school_year);
+            $g11_check->execute();
+            $g11_result = $g11_check->get_result();
+            $g11_row = $g11_result ? $g11_result->fetch_assoc() : null;
+            $g11_check->close();
+
+            if (!$g11_row) {
+                die("Error: This LRN is not in the Grade 11 completer list.");
+            }
+
+            $completer_strand = trim((string)($g11_row['strand'] ?? ''));
+            if ($completer_strand !== '') {
+                $selected_pathway_strand = $completer_strand;
+                $pathway_strand = get_pathway_strand_code($grade_level, $selected_pathway_strand);
+                $track = in_array(strtoupper($completer_strand), ['GAS', 'STEM', 'HUMSS', 'ABM'], true) ? 'Academic' : 'TVL';
+            }
+        }
+    }
+
+    $enrollment_status = ($student_type === 'Old Student (Grade 11 Completer)') ? 'for_encoding' : 'for_evaluation';
 
     // Prepare data for insertion (simplified - add all form fields)
     $stmt = $conn->prepare("INSERT INTO students (
@@ -147,11 +210,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         mother_last_name, mother_first_name, mother_middle_name, mother_contact,
         guardian_last_name, guardian_first_name, guardian_middle_name, guardian_contact,
         sped, sped_diagnosis, pwd, pwd_id,
-        semester, track, pathway_strand, school_year, grade_level, lrn, student_type,
+        semester, track, pathway_strand, school_year, grade_level, lrn, student_type, enrollment_status,
         height, weight, psa_birth_cert,
         street, province, city, barangay, zip_code, living_with,
         prev_school, prev_school_year, prev_section
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
     if (!$stmt) {
         die("Prepare failed: " . $conn->error);
@@ -167,7 +230,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         post_value('guardian_last_name', ''), post_value('guardian_first_name', ''), post_value('guardian_middle_name', ''), post_value('guardian_contact', ''),
         $sped, $sped_diagnosis, $pwd, $pwd_id,
         post_value('semester', ''), $track, $pathway_strand, post_value('school_year', ''), $grade_level,
-        $_POST['lrn'], post_value('student_type', ''), post_value('height', null), post_value('weight', null), post_value('psa_birth_cert', ''),
+        $_POST['lrn'], $student_type, $enrollment_status, post_value('height', null), post_value('weight', null), post_value('psa_birth_cert', ''),
         post_value('street', ''), post_value('province', ''), post_value('city', ''), post_value('barangay', ''),
         post_value('zip_code', ''), post_value('living_with', ''),
         post_value('prev_school', null), post_value('prev_school_year', null), post_value('prev_section', null)

@@ -121,6 +121,7 @@ if (!$conn->connect_error) {
                         <label class="form-label">Learner Category</label>
                         <select name="student_type" class="form-input" required>
                             <option value="">Select Category...</option>
+                            <option value="Old Student (Grade 11 Completer)">Old Student (Grade 11 Completer)</option>
                             <option value="Transferee">Transferee</option>
                             <option value="Old Student (Repeater)">Old Student (Repeater)</option>
                             <option value="Transferred In (Repeater)">Transferred In (Repeater)</option>
@@ -191,21 +192,22 @@ if (!$conn->connect_error) {
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-5 mb-6 items-end">
                     <div class="form-group md:col-span-4">
                         <label class="form-label">Last Name</label>
-                        <input type="text" name="last_name" class="form-input" required>
+                        <input type="text" id="last-name-input" name="last_name" class="form-input" required>
                     </div>
                     <div class="form-group md:col-span-4">
                         <label class="form-label">First Name</label>
-                        <input type="text" name="first_name" class="form-input" required>
+                        <input type="text" id="first-name-input" name="first_name" class="form-input" required>
                     </div>
                     <div class="form-group md:col-span-3">
                         <label class="form-label">Middle Name</label>
-                        <input type="text" name="middle_name" class="form-input">
+                        <input type="text" id="middle-name-input" name="middle_name" class="form-input">
                     </div>
                     <div class="form-group md:col-span-1">
                         <label class="form-label" title="Extension Name">Ext. Name</label>
                         <input type="text" id="extension-name" name="extension_name" class="form-input" placeholder="Jr., III">
                     </div>
                 </div>
+                <input type="hidden" id="g11-verified-input" name="g11_verified" value="">
 
                 <div class="grid grid-cols-1 md:grid-cols-12 gap-5 mb-6 border-t border-slate-100 pt-6">
                     <div class="form-group md:col-span-3">
@@ -461,26 +463,142 @@ if (!$conn->connect_error) {
         include 'components/footer.php'; 
     ?>
 
+    <script src="davao-address.js"></script>
+    <script src="form-logic.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const urlParams = new URLSearchParams(window.location.search);
-            const lrn = urlParams.get('lrn');
-            if(lrn) {
-                const lrnInput = document.getElementById('lrn-input');
-                if(lrnInput) {
-                    lrnInput.value = lrn;
-                    // manually trigger input event to update counter
-                    lrnInput.dispatchEvent(new Event('input'));
-                }
-            }
+            const g11Verified = urlParams.get('g11_verified') === '1';
+            const paramLrn       = urlParams.get('lrn')          || '';
+            const paramLastName  = urlParams.get('last_name')    || '';
+            const paramFirstName = urlParams.get('first_name')   || '';
+            const paramMiddleName= urlParams.get('middle_name')  || '';
+            const paramStrand    = urlParams.get('strand')       || '';
+            const paramStudentType = urlParams.get('student_type') || '';
+
             initFormLogic('pink');
 
-            // Handle student type change for previous school info
+            // ── Pre-fill LRN ───────────────────────────────────────────
+            const lrnInput = document.getElementById('lrn-input');
+            if (lrnInput && paramLrn) {
+                lrnInput.value = paramLrn;
+                lrnInput.dispatchEvent(new Event('input'));
+            }
+
+            // ── G11-verified: lock name, LRN, student type, strand ─────
+            if (g11Verified) {
+                // Set hidden verified flag
+                const verifiedHidden = document.getElementById('g11-verified-input');
+                if (verifiedHidden) verifiedHidden.value = '1';
+
+                // Pre-fill & lock name fields
+                const lastNameEl   = document.getElementById('last-name-input');
+                const firstNameEl  = document.getElementById('first-name-input');
+                const middleNameEl = document.getElementById('middle-name-input');
+
+                function lockField(el, val) {
+                    if (!el) return;
+                    el.value = val;
+                    el.readOnly = true;
+                    el.classList.add('bg-slate-100', 'text-slate-500', 'border-slate-200', 'cursor-not-allowed');
+                }
+
+                lockField(lastNameEl,   paramLastName);
+                lockField(firstNameEl,  paramFirstName);
+                lockField(middleNameEl, paramMiddleName);
+                if (lrnInput) {
+                    lrnInput.readOnly = true;
+                    lrnInput.classList.add('bg-slate-100', 'text-slate-500', 'border-slate-200', 'cursor-not-allowed');
+                }
+
+                // Auto-select student type and disable
+                const studentTypeSelect = document.querySelector('select[name="student_type"]');
+                if (studentTypeSelect) {
+                    studentTypeSelect.value = 'Old Student (Grade 11 Completer)';
+                    studentTypeSelect.disabled = true;
+                    // Add hidden backup so form still submits the value
+                    const hiddenType = document.createElement('input');
+                    hiddenType.type = 'hidden';
+                    hiddenType.name = 'student_type';
+                    hiddenType.value = 'Old Student (Grade 11 Completer)';
+                    studentTypeSelect.parentNode.appendChild(hiddenType);
+                    // Trigger to show prev school section
+                    studentTypeSelect.dispatchEvent(new Event('change'));
+                }
+
+                // Lock strand — replace dropdowns with a read-only display + hidden inputs
+                const trackSelect  = document.getElementById('g12-track');
+                const strandSelect = document.getElementById('g12-strand');
+
+                // Determine track from strand
+                const academicStrands = ['GAS', 'STEM', 'HUMSS', 'ABM'];
+                const derivedTrack = academicStrands.includes((paramStrand || '').toUpperCase()) ? 'Academic' : 'TVL';
+
+                if (trackSelect && strandSelect) {
+                    // Mark as G11-locked so form-logic.js updateStrands() skips this select
+                    strandSelect.dataset.g11Locked = '1';
+                    trackSelect.dataset.g11Locked  = '1';
+
+                    // Disable dropdowns visually
+                    trackSelect.disabled = true;
+                    strandSelect.disabled = true;
+                    trackSelect.classList.add('bg-slate-100', 'text-slate-500', 'border-slate-200', 'cursor-not-allowed');
+                    strandSelect.classList.add('bg-slate-100', 'text-slate-500', 'border-slate-200', 'cursor-not-allowed');
+
+                    // Remove 'required' so disabled fields don't block submit
+                    trackSelect.removeAttribute('required');
+                    strandSelect.removeAttribute('required');
+
+                    // Inject hidden fields for actual submission
+                    const hiddenTrack = document.createElement('input');
+                    hiddenTrack.type  = 'hidden';
+                    hiddenTrack.name  = 'track';
+                    hiddenTrack.value = derivedTrack;
+                    trackSelect.parentNode.appendChild(hiddenTrack);
+
+                    const hiddenStrand = document.createElement('input');
+                    hiddenStrand.type  = 'hidden';
+                    hiddenStrand.name  = 'strand';
+                    hiddenStrand.value = paramStrand;
+                    strandSelect.parentNode.appendChild(hiddenStrand);
+
+                    // Show current values inside the disabled selects
+                    const trackOpt = document.createElement('option');
+                    trackOpt.value = derivedTrack;
+                    trackOpt.textContent = derivedTrack;
+                    trackOpt.selected = true;
+                    trackSelect.innerHTML = '';
+                    trackSelect.appendChild(trackOpt);
+
+                    const strandOpt = document.createElement('option');
+                    strandOpt.value = paramStrand;
+                    strandOpt.textContent = paramStrand || '(from G11 record)';
+                    strandOpt.selected = true;
+                    strandSelect.innerHTML = '';
+                    strandSelect.appendChild(strandOpt);
+                }
+
+                // Show verification banner above the form
+                const banner = document.createElement('div');
+                banner.className = 'mb-6 bg-green-50 border border-green-200 rounded-2xl p-4 flex items-start gap-4';
+                banner.innerHTML = `
+                    <div class="shrink-0 w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    </div>
+                    <div>
+                        <p class="font-black text-green-800 text-sm uppercase tracking-widest mb-0.5">Grade 11 Completer — Verified</p>
+                        <p class="text-xs text-green-700 font-semibold leading-relaxed">Your name, LRN, and strand have been pre-filled from the Grade 11 completers list and are <strong>locked</strong>. This enrollment will proceed directly to <strong>encoding</strong> without evaluation.</p>
+                    </div>`;
+                const mainForm = document.querySelector('form');
+                if (mainForm) mainForm.prepend(banner);
+            }
+
+            // ── Normal student type change handler ─────────────────────
             const studentTypeSelect = document.querySelector('select[name="student_type"]');
-            const prevSection = document.getElementById('prev-school-section');
-            const prevSchool = document.getElementById('prev-school');
-            const prevYear = document.getElementById('prev-school-year');
-            const prevSectionInput = document.getElementById('prev-section');
+            const prevSection       = document.getElementById('prev-school-section');
+            const prevSchool        = document.getElementById('prev-school');
+            const prevYear          = document.getElementById('prev-school-year');
+            const prevSectionInput  = document.getElementById('prev-section');
 
             studentTypeSelect.addEventListener('change', function() {
                 const selected = this.value;
@@ -494,6 +612,24 @@ if (!$conn->connect_error) {
                     prevSectionInput.value = '';
                     prevSectionInput.disabled = false;
                     prevSectionInput.placeholder = 'Section Name';
+                } else if (selected === 'Old Student (Grade 11 Completer)') {
+                    prevSection.classList.remove('hidden');
+                    prevSchool.value = 'Daniel R. Aguinaldo National High School';
+                    prevSchool.readOnly = true;
+                    prevYear.value = PREVIOUS_SCHOOL_YEAR || '2025-2026';
+                    prevYear.disabled = true;
+                    const sectionVal = urlParams ? (urlParams.get('section') || '') : '';
+                    prevSectionInput.value = sectionVal;
+                    if (g11Verified && sectionVal) {
+                        // Lock the section — it comes from the G11 completers list
+                        prevSectionInput.readOnly = true;
+                        prevSectionInput.classList.add('bg-slate-100', 'text-slate-500', 'border-slate-200', 'cursor-not-allowed');
+                    } else {
+                        prevSectionInput.readOnly = false;
+                        prevSectionInput.classList.remove('bg-slate-100', 'text-slate-500', 'border-slate-200', 'cursor-not-allowed');
+                        prevSectionInput.disabled = false;
+                    }
+                    prevSectionInput.placeholder = 'Previous Grade 11 Section';
                 } else if (selected === 'Old Student (Repeater)') {
                     prevSection.classList.remove('hidden');
                     prevSchool.value = 'Daniel R. Aguinaldo National High School';
@@ -515,47 +651,22 @@ if (!$conn->connect_error) {
                 }
             });
 
+            // Trigger change for G11-verified students to set up prev school section
+            if (g11Verified && studentTypeSelect) {
+                studentTypeSelect.dispatchEvent(new Event('change'));
+            }
+
             function showSelectSection(options) {
                 if (!Array.isArray(options) || options.length === 0) {
                     prevSectionInput.value = '';
                     prevSectionInput.placeholder = 'No Grade 12 sections yet';
                     return;
                 }
-
                 prevSectionInput.disabled = false;
                 prevSectionInput.placeholder = 'Select or type Section Name';
                 prevSectionInput.value = options[0] || '';
             }
-
-            function populateSections(select, sections) {
-                if (!select || select.tagName !== 'SELECT') return;
-                select.innerHTML = '<option value="">Select Section...</option>';
-                sections.forEach(sec => {
-                    const option = document.createElement('option');
-                    option.value = sec;
-                    option.textContent = sec;
-                    select.appendChild(option);
-                });
-            }
-
-            function populateYear(select) {
-                if (!select || select.tagName !== 'SELECT') return;
-                const defaultYear = PREVIOUS_SCHOOL_YEAR || '2025-2026';
-                const yearParts = defaultYear.split('-').map(v => parseInt(v.trim()));
-                let start = yearParts[0] || 2025;
-
-                select.innerHTML = '<option value="">Select Year...</option>';
-                for (let i = 0; i < 6; i++) {
-                    const val = `${start + i}-${start + i + 1}`;
-                    const option = document.createElement('option');
-                    option.value = val;
-                    option.textContent = val;
-                    select.appendChild(option);
-                }
-            }
         });
     </script>
-    <script src="davao-address.js"></script>
-    <script src="form-logic.js"></script>
 </body>
 </html>

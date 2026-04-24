@@ -4,6 +4,8 @@ function initFormLogic(themeColor) {
 
     let lrnCheckState = 'idle';
     let lastCheckedLrn = '';
+    let currentStemQualified = false;
+    let currentG11Completer = null;
 
     const setLrnStatus = (message = '', status = 'idle') => {
         const lrnInput = document.getElementById('lrn-input');
@@ -27,6 +29,44 @@ function initFormLogic(themeColor) {
         }
     };
 
+    const STEM_PATHWAYS = [
+        'Medical & Allied Health',
+        'Engineering & Aviation',
+        'Earth, Space & Weather Science'
+    ];
+
+    const applyStemQualifierSelection = (pathwayLabel) => {
+        const trackSelect = document.getElementById('g11-track');
+        const pathwaySelect = document.getElementById('g11-pathway');
+        const trackHiddenInput = document.getElementById('g11-track-hidden');
+        const pathwayHiddenInput = document.getElementById('g11-pathway-hidden');
+        if (!trackSelect || !pathwaySelect || !pathwayLabel) return;
+
+        trackSelect.value = 'Academic';
+        trackSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+        if (pathwaySelect.querySelector(`option[value="${pathwayLabel}"]`)) {
+            pathwaySelect.value = pathwayLabel;
+        }
+
+        if (trackHiddenInput) trackHiddenInput.value = trackSelect.value;
+        if (pathwayHiddenInput) pathwayHiddenInput.value = pathwaySelect.value;
+    };
+
+    const applyG12CompleterSelection = (strandValue) => {
+        const g12TrackSelect = document.getElementById('g12-track');
+        const g12StrandSelect = document.getElementById('g12-strand');
+        if (!g12TrackSelect || !g12StrandSelect || !strandValue) return;
+
+        const academicStrands = ['GAS', 'STEM', 'HUMSS', 'ABM'];
+        g12TrackSelect.value = academicStrands.includes(String(strandValue).toUpperCase()) ? 'Academic' : 'TVL';
+        g12TrackSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+        if (g12StrandSelect.querySelector(`option[value="${strandValue}"]`)) {
+            g12StrandSelect.value = strandValue;
+        }
+    };
+
     const checkLrnAvailability = async (lrn) => {
         if (!lrn || lrn.length !== 12) {
             lrnCheckState = 'idle';
@@ -39,10 +79,14 @@ function initFormLogic(themeColor) {
         setLrnStatus('Checking LRN availability...', 'loading');
 
         try {
-            const response = await fetch(`check_lrn.php?lrn=${encodeURIComponent(lrn)}`, {
+            const response = await fetch(`scripts/check_lrn.php?lrn=${encodeURIComponent(lrn)}`, {
                 headers: { 'Accept': 'application/json' }
             });
             const data = await response.json();
+
+            currentStemQualified = !!data.stem_qualified;
+            currentG11Completer = data.g11_completer ? data : null;
+            if (typeof updateStemPathwayRestrictions === 'function') updateStemPathwayRestrictions();
 
             if (lrnInput.value !== lrn) return;
 
@@ -57,7 +101,20 @@ function initFormLogic(themeColor) {
                 setLrnStatus(data.message || 'This LRN already exists in the database.', 'error');
             } else {
                 lrnCheckState = 'available';
-                setLrnStatus(data.message || 'LRN is available.', 'success');
+                if (data.stem_qualified && data.stem_pathway_label) {
+                    applyStemQualifierSelection(data.stem_pathway_label);
+                    setLrnStatus(`STEM QUALIFIED. Career pathway set to ${data.stem_pathway_label}.`, 'success');
+                } else if (document.getElementById('g11-pathway')) {
+                    setLrnStatus('You are not in the STEM qualifiers list. You may confirm your LRN, but STEM pathways are locked unless you are qualified.', 'idle');
+                } else if (data.g11_completer && data.g11_completer_strand) {
+                    if (g12StudentTypeSelect && g12StudentTypeSelect.querySelector('option[value="Old Student (Grade 11 Completer)"]')) {
+                        g12StudentTypeSelect.value = 'Old Student (Grade 11 Completer)';
+                    }
+                    applyG12CompleterSelection(data.g11_completer_strand);
+                    setLrnStatus(`GRADE 11 COMPLETER FOUND. Strand set to ${data.g11_completer_strand}.`, 'success');
+                } else {
+                    setLrnStatus(data.message || 'LRN is available.', 'success');
+                }
             }
         } catch (error) {
             if (lrnInput.value !== lrn) return;
@@ -94,6 +151,9 @@ function initFormLogic(themeColor) {
             if (count === 0) {
                 lrnCheckState = 'idle';
                 lastCheckedLrn = '';
+                currentStemQualified = false;
+                currentG11Completer = null;
+                if (typeof updateStemPathwayRestrictions === 'function') updateStemPathwayRestrictions();
                 setLrnStatus('', 'idle');
                 return;
             }
@@ -101,6 +161,9 @@ function initFormLogic(themeColor) {
             if (count < 12) {
                 lrnCheckState = 'idle';
                 lastCheckedLrn = '';
+                currentStemQualified = false;
+                currentG11Completer = null;
+                if (typeof updateStemPathwayRestrictions === 'function') updateStemPathwayRestrictions();
                 setLrnStatus('Complete the 12-digit LRN to check if it already exists.', 'idle');
                 return;
             }
@@ -189,26 +252,23 @@ function initFormLogic(themeColor) {
     };
 
     // Define Pathways dynamically
-    const pathwaysData = {
-        'Academic': [
-            "Medical & Allied Health",
-            "Engineering & Aviation",
-            "Earth, Space & Weather Science",
-            "Pre-Law & Public Governance",
-            "Criminology & Uniformed Services",
-            "Teacher Ed (Lang/Social Sci)",
-            "Social Work & Community Dev.",
-            "Digital Media & Creative Arts",
-            "Accountancy & Financial Mgmt.",
-            "Entrepreneurship & Innovation",
-            "FITNESS AND ATHLETICS DEVELOPMENT"
-        ],
-        'Tech-Pro': [
-            "ICT (Computer Systems Servicing)",
-            "Industrial (Electrical Installation)",
-            "Kitchen Operations (Cookery)",
-            "Aesthetic Services (Beauty Care)"
-        ]
+    const pathwaysData = window.DYNAMIC_PATHWAYS_DATA || {
+        'Academic': [],
+        'Tech-Pro': []
+    };
+
+    const updateStemPathwayRestrictions = () => {
+        if (!pathwaySelect) return;
+        const selectedTrack = trackSelect ? trackSelect.value : '';
+        Array.from(pathwaySelect.options).forEach(option => {
+            const isStemPathway = STEM_PATHWAYS.includes(option.value);
+            option.disabled = selectedTrack === 'Academic' && isStemPathway && !currentStemQualified;
+        });
+
+        if (!currentStemQualified && STEM_PATHWAYS.includes(pathwaySelect.value)) {
+            pathwaySelect.value = '';
+            syncG11AcademicHiddenFields();
+        }
     };
 
     if (toggleAcademicSetup && acadInputs.length > 0) {
@@ -241,11 +301,18 @@ function initFormLogic(themeColor) {
                 pathwaySelect.value = currentPathway;
             }
 
+            updateStemPathwayRestrictions();
             syncG11AcademicHiddenFields();
         };
 
         trackSelect.addEventListener('change', updatePathways);
-        pathwaySelect.addEventListener('change', syncG11AcademicHiddenFields);
+        pathwaySelect.addEventListener('change', function() {
+            if (!currentStemQualified && STEM_PATHWAYS.includes(this.value)) {
+                this.value = '';
+                setLrnStatus('You are not in the STEM qualifiers list. STEM pathways cannot be selected unless you are qualified.', 'error');
+            }
+            syncG11AcademicHiddenFields();
+        });
         // Also trigger on init
         if(trackSelect.value) updatePathways();
         syncG11AcademicHiddenFields();
@@ -254,6 +321,7 @@ function initFormLogic(themeColor) {
     // 5.5 G12 Academic Setup Strand Filtering
     const g12TrackSelect = document.getElementById('g12-track');
     const g12StrandSelect = document.getElementById('g12-strand');
+    const g12StudentTypeSelect = document.querySelector('select[name="student_type"]');
 
     const strandsData = {
         'Academic': ['ABM', 'GAS', 'HUMSS', 'STEM'],
@@ -262,6 +330,9 @@ function initFormLogic(themeColor) {
 
     if(g12TrackSelect && g12StrandSelect) {
         const updateStrands = () => {
+            // If this form was opened for a G11-verified completer, skip — strand is already locked
+            if (g12StrandSelect.dataset.g11Locked === '1') return;
+
             const selectedTrack = g12TrackSelect.value;
             const currentStrand = g12StrandSelect.value;
             
@@ -286,6 +357,14 @@ function initFormLogic(themeColor) {
 
         g12TrackSelect.addEventListener('change', updateStrands);
         if(g12TrackSelect.value) updateStrands();
+    }
+
+    if (g12StudentTypeSelect) {
+        g12StudentTypeSelect.addEventListener('change', function() {
+            if (this.value === 'Old Student (Grade 11 Completer)' && (!currentG11Completer || !currentG11Completer.g11_completer)) {
+                setLrnStatus('This LRN is not in the Grade 11 completer list. Please verify it first before using Old Student (Grade 11 Completer).', 'error');
+            }
+        });
     }
 
     // 6. Address Dropdown Logic
@@ -474,6 +553,25 @@ function initFormLogic(themeColor) {
                     setLrnStatus('This LRN already exists in the database.', 'error');
                     lrnInput.focus();
                     return;
+                }
+
+                if (pathwaySelect && trackSelect && trackSelect.value === 'Academic' && STEM_PATHWAYS.includes(pathwaySelect.value) && !currentStemQualified) {
+                    e.preventDefault();
+                    setLrnStatus('You are not in the STEM qualifiers list. STEM pathways cannot be submitted unless you are qualified.', 'error');
+                    pathwaySelect.focus();
+                    return;
+                }
+
+                if (g12StudentTypeSelect && g12StudentTypeSelect.value === 'Old Student (Grade 11 Completer)') {
+                    // Skip this check if the student arrived via the G11-verified modal flow
+                    const g11VerifiedInput = document.getElementById('g11-verified-input');
+                    const isG11Verified = g11VerifiedInput && g11VerifiedInput.value === '1';
+                    if (!isG11Verified && (!currentG11Completer || !currentG11Completer.g11_completer)) {
+                        e.preventDefault();
+                        setLrnStatus('This LRN is not in the Grade 11 completer list. Please verify it before submitting as an Old Student (Grade 11 Completer).', 'error');
+                        lrnInput.focus();
+                        return;
+                    }
                 }
 
                 if (currentMode === 'warning' && !distCheckbox.checked) {
