@@ -48,9 +48,9 @@ if (!file_exists($template_path)) {
     exit('Template not found. Please upload BEEF-Temp.docx to uploads/templates/');
 }
 
-// ── Helper: checkbox ──────────────────────────────────────────────────────────
+// ── Helper: checkbox with label ───────────────────────────────────────────────
 function cb($value, $yes_values = ['Yes', '1', 'yes', 'true']) {
-    return in_array($value, $yes_values, true) ? '☑' : '☐';
+    return in_array($value, $yes_values, true) ? '☑ Yes' : '☐ No';
 }
 
 // ── Build values ──────────────────────────────────────────────────────────────
