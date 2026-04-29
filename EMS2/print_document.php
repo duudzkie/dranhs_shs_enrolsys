@@ -224,7 +224,7 @@ if ($zip->open($out_tmp) === true) {
 $last  = strtoupper(preg_replace('/[^a-zA-Z0-9]/', '', $row['last_name']  ?? ''));
 $fi    = strtoupper(substr(preg_replace('/[^a-zA-Z]/', '', $row['first_name'] ?? ''), 0, 1));
 $lrn_f = preg_replace('/[^0-9]/', '', $lrn);
-$filename = $last . '_' . $fi . '_' . $lrn_f . '_' . date('Ymd') . '.docx';
+$filename = $last . '_' . $fi . '_' . $lrn_f . '.docx';
 $is_preview = isset($_GET['preview']) && $_GET['preview'] === '1';
 
 if ($is_preview) {
