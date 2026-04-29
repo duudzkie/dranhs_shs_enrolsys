@@ -19,6 +19,8 @@ if ($userRole === 'evaluator') {
     $allowed_pages = ['dashboard', 'student', 'evaluation'];
 } elseif ($userRole === 'encoder') {
     $allowed_pages = ['dashboard', 'student', 'encode', 'classroom'];
+} elseif ($userRole === 'adviser') {
+    $allowed_pages = ['dashboard', 'student', 'classroom'];
 } else {
     // Admin or default
     $allowed_pages = [

@@ -35,8 +35,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (password_verify($password, $user['password'])) {
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['username'] = $user['username'];
-            $_SESSION['role'] = $user['role']; // Added role to session
+            $_SESSION['role'] = $user['role'];
             $_SESSION['logged_in'] = true;
+
+            // If adviser, store their linked adviser_id and section
+            if ($user['role'] === 'adviser') {
+                $adv_stmt = $conn->prepare("SELECT a.id AS adviser_id, c.section_name, c.id AS classroom_id
+                    FROM advisers_accounts a
+                    LEFT JOIN classrooms c ON c.adviser_id = a.id
+                    WHERE a.user_id = ? LIMIT 1");
+                if ($adv_stmt) {
+                    $adv_stmt->bind_param("i", $user['id']);
+                    $adv_stmt->execute();
+                    $adv_row = $adv_stmt->get_result()->fetch_assoc();
+                    $adv_stmt->close();
+                    $_SESSION['adviser_id']      = $adv_row['adviser_id']   ?? null;
+                    $_SESSION['adviser_section'] = $adv_row['section_name'] ?? null;
+                    $_SESSION['adviser_classroom_id'] = $adv_row['classroom_id'] ?? null;
+                }
+            }
+
             header('Location: admin/admin.php');
             exit;
         } else {

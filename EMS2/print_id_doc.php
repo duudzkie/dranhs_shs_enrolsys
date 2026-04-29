@@ -53,7 +53,17 @@ $lrn        = $row['lrn'] ?: 'N/A';
 $photo_path = $row['_id_photo_path'] ?? '';
 
 // ── QR Code ───────────────────────────────────────────────────────────────────
-$qr_data    = 'LRN:' . $lrn . '|NAME:' . $full_name;
+// Encode: LRN, Name, School Year, Semester, Grade Level, Track, Pathway, Status
+$qr_data = implode('|', [
+    'LRN:'    . $lrn,
+    'NAME:'   . $full_name,
+    'SY:'     . ($row['school_year']       ?? ''),
+    'SEM:'    . ($row['semester']          ?? ''),
+    'GRADE:'  . ($row['grade_level']       ?? ''),
+    'TRACK:'  . ($row['track']             ?? ''),
+    'STRAND:' . ($row['pathway_strand']    ?? ''),
+    'STATUS:' . strtoupper($row['enrollment_status'] ?? ''),
+]);
 $qr_url     = 'https://api.qrserver.com/v1/create-qr-code/?size=400x400&ecc=M&data=' . urlencode($qr_data);
 $qr_tmp     = sys_get_temp_dir() . '/qr_id_' . $student_id . '_' . time() . '.png';
 $qr_ok      = false;

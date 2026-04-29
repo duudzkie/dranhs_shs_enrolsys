@@ -218,18 +218,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $newUsername = trim($_POST['new_username'] ?? '');
                 $newPassword = trim($_POST['new_password'] ?? '');
-                $newRole = trim($_POST['new_role'] ?? '');
+                $newRole     = trim($_POST['new_role']     ?? '');
+                $adviserLink = (int)($_POST['adviser_link'] ?? 0);
 
                 if (empty($newUsername) || empty($newPassword) || empty($newRole)) {
-                    $toast_message = 'Please fill in username, password, and role to create a new account.';
+                    $toast_message = 'Please fill in username, password, and role.';
                     $toast_type = 'error';
                 } else {
                     $hashedPwd = password_hash($newPassword, PASSWORD_DEFAULT);
                     $stmt = $conn->prepare("INSERT INTO users (username, password, role) VALUES (?, ?, ?)");
                     $stmt->bind_param('sss', $newUsername, $hashedPwd, $newRole);
                     if ($stmt->execute()) {
+                        $newUserId = $conn->insert_id;
                         $toast_message = 'New user account created successfully.';
                         $toast_type = 'success';
+
+                        // If adviser role, link to advisers_accounts
+                        if ($newRole === 'adviser' && $adviserLink > 0) {
+                            // Ensure user_id column exists
+                            $conn->query("ALTER TABLE advisers_accounts ADD COLUMN IF NOT EXISTS user_id INT NULL");
+                            $lnk = $conn->prepare("UPDATE advisers_accounts SET user_id = ? WHERE id = ?");
+                            if ($lnk) { $lnk->bind_param("ii", $newUserId, $adviserLink); $lnk->execute(); $lnk->close(); }
+                            $toast_message = 'Adviser account created and linked successfully.';
+                        }
                     } else {
                         $toast_message = 'Failed to create account. Username might already exist.';
                         $toast_type = 'error';
@@ -331,7 +342,7 @@ if ($userResult) {
 
 // Fetch faculty advisers
 $advisers = [];
-$advResult = $conn->query("SELECT a.id, a.name, a.avatar, c.section_name
+$advResult = $conn->query("SELECT a.id, a.name, a.avatar, a.user_id, c.section_name
     FROM advisers_accounts a
     LEFT JOIN classrooms c ON c.adviser_id = a.id
     ORDER BY a.name ASC");
@@ -476,12 +487,29 @@ if ($advResult) {
 
             <div id="modal-role-group" class="hidden">
                 <label class="text-xs font-bold uppercase tracking-wider text-slate-500">New Role</label>
-                <select name="new_role" id="modal-new-role" class="form-input">
+                <select name="new_role" id="modal-new-role" class="form-input" onchange="toggleAdviserLinkGroup(this.value)">
                     <option value="">-- keep current --</option>
                     <option value="admin">admin</option>
                     <option value="evaluator">evaluator</option>
                     <option value="encoder">encoder</option>
+                    <option value="adviser">adviser</option>
                 </select>
+            </div>
+
+            <div id="modal-adviser-link-group" class="hidden">
+                <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Link to Adviser</label>
+                <select name="adviser_link" id="modal-adviser-link" class="form-input">
+                    <option value="">-- Select Adviser --</option>
+                    <?php foreach ($advisers as $adv): ?>
+                    <option value="<?php echo (int)$adv['id']; ?>"
+                        <?php echo !empty($adv['user_id']) ? 'disabled style="color:#94a3b8"' : ''; ?>>
+                        <?php echo htmlspecialchars($adv['name']); ?>
+                        <?php echo !empty($adv['user_id']) ? ' (already linked)' : ''; ?>
+                        <?php echo !empty($adv['section_name']) ? ' — ' . htmlspecialchars($adv['section_name']) : ''; ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+                <p class="text-xs text-slate-400 mt-1">Links this account to an adviser so they can only see their assigned section.</p>
             </div>
 
             <div id="modal-username-group" class="hidden">
@@ -559,10 +587,20 @@ function openNewAccountModal(){
     document.getElementById('modal-password-group').classList.remove('hidden');
     document.getElementById('modal-adviser-name-group').classList.add('hidden');
     document.getElementById('modal-photo-group').classList.add('hidden');
+    document.getElementById('modal-adviser-link-group').classList.add('hidden');
     document.getElementById('modal-new-username').value = '';
     document.getElementById('modal-new-password').value = '';
     document.getElementById('modal-new-role').value = 'admin';
     document.getElementById('modal-admin-password').value = '';
+}
+
+function toggleAdviserLinkGroup(role) {
+    const grp = document.getElementById('modal-adviser-link-group');
+    if (role === 'adviser') {
+        grp.classList.remove('hidden');
+    } else {
+        grp.classList.add('hidden');
+    }
 }
 
 function openRevealPasswordModal(userId, userName){

@@ -45,7 +45,16 @@ $base    = $last . '_' . $fi . '_' . $lrn_f;
 $full_name = strtoupper(trim(
     ($row['last_name'] ?? '') . ', ' . ($row['first_name'] ?? '')
 ));
-$qr_data   = 'LRN:' . ($row['lrn'] ?? '') . '|NAME:' . $full_name;
+$qr_data   = implode('|', [
+    'LRN:'    . ($row['lrn'] ?? ''),
+    'NAME:'   . $full_name,
+    'SY:'     . ($row['school_year']       ?? ''),
+    'SEM:'    . ($row['semester']          ?? ''),
+    'GRADE:'  . ($row['grade_level']       ?? ''),
+    'TRACK:'  . ($row['track']             ?? ''),
+    'STRAND:' . ($row['pathway_strand']    ?? ''),
+    'STATUS:' . strtoupper($row['enrollment_status'] ?? ''),
+]);
 $qr_url    = 'https://api.qrserver.com/v1/create-qr-code/?size=400x400&ecc=M&data=' . urlencode($qr_data);
 $qr_tmp    = sys_get_temp_dir() . '/qr_dl_' . $student_id . '.png';
 $qr_ok     = false;
