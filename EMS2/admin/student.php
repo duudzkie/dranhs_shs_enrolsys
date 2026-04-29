@@ -222,7 +222,7 @@ if ($conn->connect_error) {
                             <button type="button" class="view-student-btn inline-flex items-center justify-center w-9 h-9 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors" data-student-id="<?php echo (int) $row['id']; ?>" title="View">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                             </button>
-                            <button type="button" class="print-student-btn inline-flex items-center justify-center w-9 h-9 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors" data-student-id="<?php echo (int) $row['id']; ?>" title="Print">
+                            <button type="button" class="print-student-btn inline-flex items-center justify-center w-9 h-9 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors <?php echo ($row['enrollment_status'] !== 'enrolled') ? 'hidden' : ''; ?>" data-student-id="<?php echo (int) $row['id']; ?>" title="Print">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-3a2 2 0 00-2-2H5a2 2 0 00-2 2v3a2 2 0 002 2h2m10 0H7m10 0v4H7v-4m10-8V3H7v6h10z"></path></svg>
                             </button>
                             <button type="button" class="withdraw-student-btn inline-flex items-center justify-center w-9 h-9 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors" data-student-id="<?php echo (int) $row['id']; ?>" title="Withdraw">
@@ -551,6 +551,39 @@ if ($conn->connect_error) {
                         </div>
                     </div>
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Document Preview Modal -->
+<div id="doc-preview-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-slate-900/70 modal-close"></div>
+    <div class="relative z-10 min-h-screen flex items-start justify-center p-4 py-6">
+        <div class="w-full max-w-5xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col" style="height:90vh">
+            <!-- Header -->
+            <div class="bg-dranhs-dark px-6 py-4 flex items-center justify-between shrink-0">
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-[0.2em] text-dranhs-green mb-0.5">Enrollment Document Preview</p>
+                    <h3 id="doc-preview-student" class="font-heading font-black text-xl text-white"></h3>
+                </div>
+                <div class="flex items-center gap-2">
+                    <a id="doc-download-link" href="#" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-dranhs-green text-white text-sm font-bold hover:bg-emerald-700 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                        Download .docx
+                    </a>
+                    <button type="button" class="modal-close inline-flex items-center justify-center w-10 h-10 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors text-xl">&times;</button>
+                </div>
+            </div>
+            <!-- Preview note -->
+            <div class="bg-amber-50 border-b border-amber-200 px-6 py-2 shrink-0">
+                <p class="text-xs text-amber-700 font-semibold">
+                    ⚠ Preview may not render perfectly in all browsers. Download the .docx for the exact formatted output.
+                </p>
+            </div>
+            <!-- iframe -->
+            <div class="flex-1 overflow-hidden bg-slate-100">
+                <iframe id="doc-preview-frame" src="" class="w-full h-full border-0" title="Document Preview"></iframe>
             </div>
         </div>
     </div>
@@ -900,7 +933,14 @@ document.getElementById('print-id-btn').addEventListener('click', function () {
 });
 document.getElementById('print-doc-btn').addEventListener('click', function () {
     if (!_printStudentId) return;
-    window.location.href = '../print_document.php?id=' + _printStudentId;
+    // Open preview modal
+    const previewUrl = '../print_document.php?id=' + _printStudentId + '&preview=1';
+    const downloadUrl = '../print_document.php?id=' + _printStudentId;
+    document.getElementById('doc-preview-frame').src = previewUrl;
+    document.getElementById('doc-download-link').href = downloadUrl;
+    document.getElementById('doc-preview-student').textContent = document.getElementById('print-student-title').textContent.replace('Print Options for ', '');
+    document.getElementById('student-print-modal').classList.add('hidden');
+    openModal('doc-preview-modal');
 });
 document.querySelectorAll('.withdraw-student-btn').forEach(btn => btn.addEventListener('click', function () {
     const student = studentMap.get(this.dataset.studentId);
