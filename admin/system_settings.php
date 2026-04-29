@@ -152,6 +152,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
+        elseif ($_POST['action'] === 'upload_template') {
+            $allowed = ['docx'];
+            $tpl_dir = '../uploads/templates/';
+            if (!is_dir($tpl_dir)) mkdir($tpl_dir, 0755, true);
+
+            if (isset($_FILES['template_file']) && $_FILES['template_file']['error'] === UPLOAD_ERR_OK) {
+                $fname = $_FILES['template_file']['name'];
+                $ext   = strtolower(pathinfo($fname, PATHINFO_EXTENSION));
+                if (in_array($ext, $allowed)) {
+                    // Always save as BEEF-Temp.docx (the fixed name print_document.php expects)
+                    $dest = $tpl_dir . 'BEEF-Temp.docx';
+                    // Backup old one
+                    if (file_exists($dest)) {
+                        rename($dest, $tpl_dir . 'BEEF-Temp_backup_' . date('Ymd_His') . '.docx');
+                    }
+                    if (move_uploaded_file($_FILES['template_file']['tmp_name'], $dest)) {
+                        $toast_message = 'Template uploaded successfully! Old template backed up.';
+                        $toast_type    = 'success';
+                    } else {
+                        $toast_message = 'Upload failed. Check folder permissions.';
+                        $toast_type    = 'error';
+                    }
+                } else {
+                    $toast_message = 'Only .docx files are allowed.';
+                    $toast_type    = 'error';
+                }
+            } else {
+                $toast_message = 'No file received.';
+                $toast_type    = 'error';
+            }
+        }
         elseif ($_POST['action'] === 'retrieve_student') {
             $sid = intval($_POST['student_id'] ?? 0);
             if ($sid > 0) {
@@ -309,6 +340,10 @@ function getRoomAssignment($roomNumber, $registries) {
         <button class="px-6 py-4 font-bold text-sm text-slate-400 cursor-not-allowed shrink-0 flex items-center gap-2">Theme <span class="bg-slate-200 text-slate-500 text-[10px] px-1.5 py-0.5 rounded-md uppercase tracking-wide">Soon</span></button>
         <button onclick="switchTab('curriculum')" id="tab-btn-curriculum" class="tab-btn px-6 py-4 font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors shrink-0 flex items-center gap-2">Curriculum</button>
         <button onclick="switchTab('datahub')" id="tab-btn-datahub" class="tab-btn px-6 py-4 font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors shrink-0 flex items-center gap-2">Data Hub</button>
+        <button onclick="switchTab('print-templates')" id="tab-btn-print-templates" class="tab-btn px-6 py-4 font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors shrink-0 flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            Print Templates
+        </button>
     </div>
 
     <div class="flex-1 p-6 lg:p-8">
@@ -925,6 +960,151 @@ function getRoomAssignment($roomNumber, $registries) {
     </div>
 </div>
 
+<!-- PRINT TEMPLATES TAB -->
+<div id="tab-print-templates" class="tab-content hidden">
+    <div class="max-w-2xl">
+        <h2 class="text-2xl font-heading font-black text-dranhs-dark mb-1">Print Templates</h2>
+        <p class="text-sm text-slate-500 mb-8">Manage the document templates used when printing enrollment forms. Upload a new <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono">.docx</code> file to replace the current template.</p>
+
+        <!-- Current Template Status -->
+        <div class="mb-6 p-5 rounded-2xl border <?php echo file_exists('../uploads/templates/BEEF-Temp.docx') ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'; ?>">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 <?php echo file_exists('../uploads/templates/BEEF-Temp.docx') ? 'bg-emerald-100' : 'bg-amber-100'; ?>">
+                    <svg class="w-5 h-5 <?php echo file_exists('../uploads/templates/BEEF-Temp.docx') ? 'text-emerald-600' : 'text-amber-600'; ?>" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                </div>
+                <div>
+                    <div class="text-sm font-black <?php echo file_exists('../uploads/templates/BEEF-Temp.docx') ? 'text-emerald-800' : 'text-amber-800'; ?>">
+                        <?php echo file_exists('../uploads/templates/BEEF-Temp.docx') ? '✓ Template found — BEEF-Temp.docx' : '⚠ No template uploaded yet'; ?>
+                    </div>
+                    <?php if (file_exists('../uploads/templates/BEEF-Temp.docx')): ?>
+                    <div class="text-xs text-emerald-600 mt-0.5">
+                        Last modified: <?php echo date('F d, Y h:i A', filemtime('../uploads/templates/BEEF-Temp.docx')); ?>
+                        &nbsp;·&nbsp;
+                        Size: <?php echo round(filesize('../uploads/templates/BEEF-Temp.docx') / 1024, 1); ?> KB
+                    </div>
+                    <?php else: ?>
+                    <div class="text-xs text-amber-600 mt-0.5">Upload a .docx template below to enable document printing.</div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upload Form -->
+        <form action="?page=system_settings" method="POST" enctype="multipart/form-data"
+              class="p-6 bg-white border-2 border-dashed border-slate-300 rounded-2xl hover:border-dranhs-green transition-colors"
+              id="template-upload-form">
+            <input type="hidden" name="action" value="upload_template">
+
+            <div class="flex flex-col items-center gap-4 text-center" id="drop-zone">
+                <div class="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center">
+                    <svg class="w-7 h-7 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                </div>
+                <div>
+                    <p class="text-sm font-bold text-slate-700">Drop your .docx template here</p>
+                    <p class="text-xs text-slate-400 mt-1">or click to browse — only .docx files accepted</p>
+                </div>
+                <label class="cursor-pointer">
+                    <span class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-dranhs-green text-white text-sm font-bold hover:bg-emerald-700 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                        Choose File
+                    </span>
+                    <input type="file" name="template_file" id="template-file-input" accept=".docx" class="hidden" required>
+                </label>
+                <div id="file-selected" class="hidden text-sm font-semibold text-dranhs-green"></div>
+            </div>
+
+            <div class="mt-5 pt-5 border-t border-slate-100 flex items-center justify-between">
+                <p class="text-xs text-slate-400">The old template will be automatically backed up before replacing.</p>
+                <button type="submit" id="upload-submit-btn" disabled
+                    class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-slate-200 text-slate-400 text-sm font-bold cursor-not-allowed transition-colors"
+                    id="upload-btn">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                    Upload Template
+                </button>
+            </div>
+        </form>
+
+        <!-- Backups list -->
+        <?php
+        $backups = glob('../uploads/templates/BEEF-Temp_backup_*.docx') ?: [];
+        rsort($backups); // newest first
+        ?>
+        <?php if (!empty($backups)): ?>
+        <div class="mt-6">
+            <h3 class="text-xs font-black uppercase tracking-widest text-slate-500 mb-3">Previous Backups</h3>
+            <div class="space-y-2">
+                <?php foreach (array_slice($backups, 0, 5) as $bk): ?>
+                <div class="flex items-center justify-between px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    <div class="flex items-center gap-3">
+                        <svg class="w-4 h-4 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                        <span class="text-xs font-semibold text-slate-600"><?php echo htmlspecialchars(basename($bk)); ?></span>
+                    </div>
+                    <span class="text-xs text-slate-400"><?php echo date('M d, Y h:i A', filemtime($bk)); ?></span>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <!-- Placeholder reference -->
+        <div class="mt-8 p-5 bg-slate-50 border border-slate-200 rounded-2xl">
+            <h3 class="text-xs font-black uppercase tracking-widest text-slate-500 mb-3">Placeholder Reference</h3>
+            <p class="text-xs text-slate-500 mb-3">Use these exact strings in your Word template. PHPWord will replace them with student data on download.</p>
+            <div class="grid grid-cols-2 gap-x-6 gap-y-1 text-xs font-mono">
+                <?php
+                $placeholders = [
+                    '${STUDENT_TYPE}' => 'Learner Category',
+                    '${LRN}' => 'LRN',
+                    '${GRADE_LEVEL}' => 'Grade Level',
+                    '${SCHOOL_YEAR}' => 'School Year',
+                    '${LAST_NAME}' => 'Last Name',
+                    '${FIRST_NAME}' => 'First Name',
+                    '${MIDDLE_NAME}' => 'Middle Name',
+                    '${EXTENSION_NAME}' => 'Ext. Name',
+                    '${SEX_MALE}' => '☑/☐ Male',
+                    '${SEX_FEMALE}' => '☑/☐ Female',
+                    '${BIRTHDATE}' => 'Birthdate',
+                    '${AGE}' => 'Age',
+                    '${PLACE_OF_BIRTH}' => 'Place of Birth',
+                    '${MOTHER_TONGUE}' => 'Mother Tongue',
+                    '${RELIGION}' => 'Religion',
+                    '${IP_COMMUNITY}' => '☑/☐ IP Community',
+                    '${FAMILY_4PS}' => '☑/☐ 4Ps',
+                    '${STREET}' => 'Street',
+                    '${BARANGAY}' => 'Barangay',
+                    '${CITY}' => 'City',
+                    '${PROVINCE}' => 'Province',
+                    '${ZIP_CODE}' => 'Zip Code',
+                    '${LIVING_WITH}' => 'Living With',
+                    '${FATHER_LAST_NAME}' => 'Father Last Name',
+                    '${FATHER_FIRST_NAME}' => 'Father First Name',
+                    '${FATHER_CONTACT}' => 'Father Contact',
+                    '${MOTHER_LAST_NAME}' => 'Mother Last Name',
+                    '${MOTHER_FIRST_NAME}' => 'Mother First Name',
+                    '${MOTHER_CONTACT}' => 'Mother Contact',
+                    '${GUARDIAN_LAST_NAME}' => 'Guardian Last Name',
+                    '${GUARDIAN_CONTACT}' => 'Guardian Contact',
+                    '${SPED}' => '☑/☐ SPED',
+                    '${PWD}' => '☑/☐ PWD',
+                    '${SEMESTER}' => 'Semester',
+                    '${TRACK}' => 'Track',
+                    '${PATHWAY_STRAND}' => 'Pathway/Strand',
+                    '${FULL_NAME}' => 'Full Name',
+                    '${ID_PHOTO}' => 'ID Photo (image)',
+                    '${QR_CODE}' => 'QR Code (image)',
+                ];
+                foreach ($placeholders as $ph => $label):
+                ?>
+                <div class="flex items-center gap-2 py-0.5">
+                    <code class="text-blue-600 bg-blue-50 px-1 rounded"><?php echo htmlspecialchars($ph); ?></code>
+                    <span class="text-slate-500"><?php echo htmlspecialchars($label); ?></span>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </div>
+</div>
+
 
 <script>
     // Tab switching
@@ -1008,7 +1188,24 @@ function getRoomAssignment($roomNumber, $registries) {
         if (savedTab) {
             switchTab(savedTab);
         }
-        
+
+        // Template file input — show filename + enable submit
+        const tplInput = document.getElementById('template-file-input');
+        const tplSubmit = document.getElementById('upload-submit-btn');
+        const fileSelected = document.getElementById('file-selected');
+        if (tplInput) {
+            tplInput.addEventListener('change', function () {
+                if (this.files && this.files.length > 0) {
+                    const fname = this.files[0].name;
+                    fileSelected.textContent = '📄 ' + fname;
+                    fileSelected.classList.remove('hidden');
+                    tplSubmit.disabled = false;
+                    tplSubmit.classList.remove('bg-slate-200', 'text-slate-400', 'cursor-not-allowed');
+                    tplSubmit.classList.add('bg-dranhs-green', 'text-white', 'hover:bg-emerald-700', 'cursor-pointer');
+                }
+            });
+        }
+
         const toggleCheck = document.querySelector('input[name="enrollment_status"]');
         if (toggleCheck) {
             toggleCheck.addEventListener('change', function() {
