@@ -155,14 +155,14 @@ $tpl->setValue('PATHWAY_STRAND',   htmlspecialchars($pathway));
 $tpl->setValue('FULL_NAME',        htmlspecialchars($full_name));
 
 // ── Images ────────────────────────────────────────────────────────────────────
-// ID Photo — 1" × 1.2" = 96×115px at 96dpi (fits Word table cell)
+// ID Photo — 1.4" × 1.4" = 134×134px at 96dpi
 $photo_abs = __DIR__ . '/' . $photo_path;
 if ($photo_path && file_exists($photo_abs)) {
     try {
         $tpl->setImageValue('ID_PHOTO', [
             'path'   => $photo_abs,
-            'width'  => 96,
-            'height' => 115,
+            'width'  => 134,
+            'height' => 134,
             'ratio'  => false,
         ]);
     } catch (Exception $e) {
@@ -220,8 +220,11 @@ if ($zip->open($out_tmp) === true) {
 }
 
 // ── Stream to browser ─────────────────────────────────────────────────────────
-$safe_name = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $full_name);
-$filename  = 'BEEF_' . $safe_name . '_' . date('Ymd') . '.docx';
+// Filename: LASTNAME_FI_LRN_DATE.docx
+$last  = strtoupper(preg_replace('/[^a-zA-Z0-9]/', '', $row['last_name']  ?? ''));
+$fi    = strtoupper(substr(preg_replace('/[^a-zA-Z]/', '', $row['first_name'] ?? ''), 0, 1));
+$lrn_f = preg_replace('/[^0-9]/', '', $lrn);
+$filename = $last . '_' . $fi . '_' . $lrn_f . '_' . date('Ymd') . '.docx';
 $is_preview = isset($_GET['preview']) && $_GET['preview'] === '1';
 
 if ($is_preview) {
