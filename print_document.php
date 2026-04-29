@@ -112,7 +112,9 @@ $tpl->setValue('PLACE_OF_BIRTH',   htmlspecialchars($row['place_of_birth']    ??
 $tpl->setValue('MOTHER_TONGUE',    htmlspecialchars($row['mother_tongue']     ?? ''));
 $tpl->setValue('RELIGION',         htmlspecialchars($row['religion']          ?? ''));
 $tpl->setValue('IP_COMMUNITY',     cb($row['ip_community'] ?? ''));
+$tpl->setValue('IP_SPECIFY',       htmlspecialchars($row['ip_specify'] ?? ''));
 $tpl->setValue('FAMILY_4PS',       cb($row['family_4ps']   ?? ''));
+$tpl->setValue('FPS_ID',           htmlspecialchars($row['fps_id']     ?? ''));
 
 // Section 3 — Address
 $tpl->setValue('STREET',           htmlspecialchars($row['street']            ?? ''));
@@ -220,9 +222,16 @@ if ($zip->open($out_tmp) === true) {
 // ── Stream to browser ─────────────────────────────────────────────────────────
 $safe_name = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $full_name);
 $filename  = 'BEEF_' . $safe_name . '_' . date('Ymd') . '.docx';
+$is_preview = isset($_GET['preview']) && $_GET['preview'] === '1';
 
-header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-header('Content-Disposition: attachment; filename="' . $filename . '"');
+if ($is_preview) {
+    // Stream as inline so browser/Google Docs viewer can display it
+    header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    header('Content-Disposition: inline; filename="' . $filename . '"');
+} else {
+    header('Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+}
 header('Content-Length: ' . filesize($out_tmp));
 header('Cache-Control: no-cache, no-store, must-revalidate');
 header('Pragma: no-cache');
