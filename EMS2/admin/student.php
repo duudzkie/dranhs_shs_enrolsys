@@ -556,6 +556,64 @@ if ($conn->connect_error) {
     </div>
 </div>
 
+<!-- ID Assets Modal -->
+<div id="id-assets-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-slate-900/70 modal-close"></div>
+    <div class="relative z-10 min-h-screen flex items-center justify-center p-4">
+        <div class="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+            <!-- Header -->
+            <div class="bg-dranhs-dark px-6 py-4 flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-[0.2em] text-dranhs-green mb-0.5">ID Assets</p>
+                    <h3 id="id-assets-student-name" class="font-heading font-black text-xl text-white"></h3>
+                </div>
+                <button type="button" class="modal-close inline-flex items-center justify-center w-10 h-10 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors text-xl">&times;</button>
+            </div>
+
+            <!-- Two boxes -->
+            <div class="p-6 grid grid-cols-2 gap-5">
+
+                <!-- ID Photo box -->
+                <div class="flex flex-col items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                    <p class="text-xs font-black uppercase tracking-widest text-slate-500">ID Photo</p>
+                    <div class="w-full aspect-square rounded-xl overflow-hidden border border-slate-200 bg-white flex items-center justify-center">
+                        <img id="id-assets-photo" src="" alt="ID Photo" class="w-full h-full object-cover">
+                    </div>
+                    <a id="id-assets-photo-dl" href="#" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-dranhs-green text-white text-xs font-bold hover:bg-emerald-700 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                        Download Photo
+                    </a>
+                </div>
+
+                <!-- QR Code box -->
+                <div class="flex flex-col items-center gap-3 p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                    <p class="text-xs font-black uppercase tracking-widest text-slate-500">QR Code</p>
+                    <div class="w-full aspect-square rounded-xl overflow-hidden border border-slate-200 bg-white flex items-center justify-center p-2">
+                        <img id="id-assets-qr" src="" alt="QR Code" class="w-full h-full object-contain">
+                    </div>
+                    <a id="id-assets-qr-dl" href="#" class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                        Download QR
+                    </a>
+                </div>
+
+            </div>
+
+            <!-- Bottom: Print ID + Download ZIP -->
+            <div class="px-6 pb-6 flex flex-col sm:flex-row gap-3">
+                <button type="button" id="id-assets-print-btn" class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-slate-800 text-white text-sm font-bold hover:bg-slate-700 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-3a2 2 0 00-2-2H5a2 2 0 00-2 2v3a2 2 0 002 2h2m10 0H7m10 0v4H7v-4m10-8V3H7v6h10z"/></svg>
+                    Print ID Card
+                </button>
+                <a id="id-assets-zip-dl" href="#" class="flex-1 inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-violet-600 text-white text-sm font-bold hover:bg-violet-700 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    Download Both (ZIP)
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Document Preview Modal -->
 <div id="doc-preview-modal" class="fixed inset-0 z-50 hidden">
     <div class="absolute inset-0 bg-slate-900/70 modal-close"></div>
@@ -929,7 +987,37 @@ document.querySelectorAll('.print-student-btn').forEach(btn => btn.addEventListe
 }));
 document.getElementById('print-id-btn').addEventListener('click', function () {
     if (!_printStudentId) return;
-    window.open('../print_id.php?id=' + _printStudentId, '_blank');
+    const student = studentMap.get(String(_printStudentId));
+    if (!student) return;
+
+    // Build QR data URL for preview
+    const lrn  = student.lrn  || '';
+    const name = ((student.last_name || '') + ', ' + (student.first_name || '')).toUpperCase();
+    const qrData = encodeURIComponent('LRN:' + lrn + '|NAME:' + name);
+    const qrPreviewUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&ecc=M&data=' + qrData;
+
+    // Photo preview — use existing photo or avatar fallback
+    const photoSrc = student._id_photo_path
+        ? '../' + student._id_photo_path
+        : 'https://ui-avatars.com/api/?name=' + encodeURIComponent((student.first_name||'S').charAt(0) + (student.last_name||'').charAt(0)) + '&background=009b5a&color=fff&size=200&bold=true';
+
+    document.getElementById('id-assets-student-name').textContent = fullName(student);
+    document.getElementById('id-assets-photo').src    = photoSrc;
+    document.getElementById('id-assets-qr').src       = qrPreviewUrl;
+
+    // Download links
+    const base = '../download_id_assets.php?id=' + _printStudentId;
+    document.getElementById('id-assets-photo-dl').href = base + '&type=photo';
+    document.getElementById('id-assets-qr-dl').href    = base + '&type=qr';
+    document.getElementById('id-assets-zip-dl').href   = base + '&type=zip';
+
+    // Print ID card button
+    document.getElementById('id-assets-print-btn').onclick = function () {
+        window.open('../print_id.php?id=' + _printStudentId, '_blank');
+    };
+
+    document.getElementById('student-print-modal').classList.add('hidden');
+    openModal('id-assets-modal');
 });
 document.getElementById('print-doc-btn').addEventListener('click', function () {
     if (!_printStudentId) return;
