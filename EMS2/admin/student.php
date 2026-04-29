@@ -529,13 +529,27 @@ if ($conn->connect_error) {
                 <button type="button" class="modal-close inline-flex items-center justify-center w-10 h-10 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors">&times;</button>
             </div>
             <div class="p-6 space-y-4">
-                <button type="button" class="w-full px-5 py-5 rounded-2xl border border-slate-200 bg-slate-50 text-left hover:bg-slate-100 transition-colors" onclick="alert('Print ID function is not connected yet.')">
-                    <span class="block text-sm font-black text-dranhs-dark uppercase tracking-wide">Print for ID</span>
-                    <span class="block text-xs text-slate-500 mt-2">Prepare ID layout for this student.</span>
+                <button type="button" id="print-id-btn" class="w-full px-5 py-5 rounded-2xl border border-slate-200 bg-slate-50 text-left hover:bg-emerald-50 hover:border-dranhs-green transition-colors group">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0 group-hover:bg-dranhs-green transition-colors">
+                            <svg class="w-5 h-5 text-dranhs-green group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M7 9h10M7 13h6"/></svg>
+                        </div>
+                        <div>
+                            <span class="block text-sm font-black text-dranhs-dark uppercase tracking-wide">Print for ID</span>
+                            <span class="block text-xs text-slate-500 mt-0.5">Opens QR ID card layout — CR80 size, ready to print.</span>
+                        </div>
+                    </div>
                 </button>
-                <button type="button" class="w-full px-5 py-5 rounded-2xl border border-slate-200 bg-slate-50 text-left hover:bg-slate-100 transition-colors" onclick="alert('Print document function is not connected yet.')">
-                    <span class="block text-sm font-black text-dranhs-dark uppercase tracking-wide">Print for Document</span>
-                    <span class="block text-xs text-slate-500 mt-2">Prepare document printout for this student.</span>
+                <button type="button" id="print-doc-btn" class="w-full px-5 py-5 rounded-2xl border border-slate-200 bg-slate-50 text-left hover:bg-blue-50 hover:border-blue-400 transition-colors group">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
+                            <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                        </div>
+                        <div>
+                            <span class="block text-sm font-black text-dranhs-dark uppercase tracking-wide">Print for Document</span>
+                            <span class="block text-xs text-slate-500 mt-0.5">Prepare enrollment document printout for this student.</span>
+                        </div>
+                    </div>
                 </button>
             </div>
         </div>
@@ -872,12 +886,22 @@ document.getElementById('view-to-edit-btn').addEventListener('click', function (
     populateEditModal(student);
     openModal('student-edit-modal');
 });
+let _printStudentId = null;
 document.querySelectorAll('.print-student-btn').forEach(btn => btn.addEventListener('click', function () {
     const student = studentMap.get(this.dataset.studentId);
     if (!student) return;
+    _printStudentId = student.id;
     document.getElementById('print-student-title').textContent = `Print Options for ${fullName(student)}`;
     openModal('student-print-modal');
 }));
+document.getElementById('print-id-btn').addEventListener('click', function () {
+    if (!_printStudentId) return;
+    window.open('../print_id.php?id=' + _printStudentId, '_blank');
+});
+document.getElementById('print-doc-btn').addEventListener('click', function () {
+    if (!_printStudentId) return;
+    window.location.href = '../print_document.php?id=' + _printStudentId;
+});
 document.querySelectorAll('.withdraw-student-btn').forEach(btn => btn.addEventListener('click', function () {
     const student = studentMap.get(this.dataset.studentId);
     if (!student) return;

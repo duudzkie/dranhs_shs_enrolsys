@@ -331,7 +331,10 @@ if ($userResult) {
 
 // Fetch faculty advisers
 $advisers = [];
-$advResult = $conn->query("SELECT id, name, avatar FROM advisers_accounts ORDER BY name ASC");
+$advResult = $conn->query("SELECT a.id, a.name, a.avatar, c.section_name
+    FROM advisers_accounts a
+    LEFT JOIN classrooms c ON c.adviser_id = a.id
+    ORDER BY a.name ASC");
 if ($advResult) {
     while ($row = $advResult->fetch_assoc()) {
         $advisers[] = $row;
@@ -415,13 +418,14 @@ if ($advResult) {
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">#</th>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Adviser</th>
                             <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Avatar</th>
+                            <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider">Section</th>
                             <th class="px-4 py-3 text-right text-xs font-bold uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-slate-100">
                         <?php if (empty($advisers)): ?>
                             <tr>
-                                <td colspan="4" class="px-4 py-5 text-sm text-slate-500 text-center">No faculty advisers found.</td>
+                                <td colspan="5" class="px-4 py-5 text-sm text-slate-500 text-center">No faculty advisers found.</td>
                             </tr>
                         <?php else: ?>
                             <?php foreach ($advisers as $index => $adv): ?>
@@ -435,6 +439,7 @@ if ($advResult) {
                                             <div class="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-xs text-slate-500">No Photo</div>
                                         <?php endif; ?>
                                     </td>
+                                    <td class="px-4 py-3 text-sm text-slate-600"><?php echo htmlspecialchars($adv['section_name'] ?? ''); ?></td>
                                     <td class="px-4 py-3 text-right">
                                         <div class="inline-flex items-center justify-end gap-2">
                                             <button type="button" onclick="openUploadPhotoModal(<?php echo $adv['id']; ?>, '<?php echo addslashes($adv['name']); ?>')" class="text-slate-400 hover:text-dranhs-green transition" title="Update Adviser Photo">

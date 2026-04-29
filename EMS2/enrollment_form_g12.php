@@ -464,7 +464,7 @@ if (!$conn->connect_error) {
     ?>
 
     <script src="davao-address.js"></script>
-    <script src="form-logic.js"></script>
+    <script src="form-logic.js?v=<?php echo filemtime(__DIR__ . '/form-logic.js'); ?>"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const urlParams = new URLSearchParams(window.location.search);

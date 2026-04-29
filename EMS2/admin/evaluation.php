@@ -8,6 +8,7 @@ $db_name = 'dranhswin';
 $conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
 
 $evaluation_rows = [];
+$classroom_rows = [];
 $db_error = '';
 $toast_message = '';
 
@@ -123,6 +124,15 @@ if ($conn->connect_error) {
     } else {
         $db_error = 'Unable to load evaluation records.';
     }
+
+    $classroom_sql = "SELECT c.grade_level, c.pathway_strand, c.max_capacity,
+        (SELECT COUNT(*) FROM students s WHERE s.assigned_section = c.section_name AND s.enrollment_status = 'enrolled') AS enrolled
+        FROM classrooms c";
+    $classroom_res = $conn->query($classroom_sql);
+    if ($classroom_res) {
+        while ($row = $classroom_res->fetch_assoc()) $classroom_rows[] = $row;
+        $classroom_res->close();
+    }
     $conn->close();
 }
 
@@ -237,6 +247,24 @@ function eval_full_name($row) {
                     <div class="p-5 ml-2 grid grid-cols-2 md:grid-cols-4 gap-4" id="eval-basic-grid"></div>
                 </div>
 
+                <div id="eval-distance-panel" class="hidden bg-white rounded-2xl border border-amber-200 overflow-hidden relative">
+                    <div class="absolute top-0 left-0 w-2 h-full rounded-l-2xl bg-amber-500"></div>
+                    <div class="px-6 pt-4 pb-3 border-b border-amber-100 ml-2">
+                        <h4 class="text-sm font-black uppercase tracking-widest text-amber-700">Distance Advisory</h4>
+                        <p id="eval-distance-caption" class="text-xs text-amber-700 mt-0.5"></p>
+                    </div>
+                    <div class="p-5 ml-2 grid grid-cols-1 md:grid-cols-3 gap-4" id="eval-distance-grid"></div>
+                </div>
+
+                <div id="eval-special-needs-panel" class="hidden bg-white rounded-2xl border border-sky-200 overflow-hidden relative">
+                    <div class="absolute top-0 left-0 w-2 h-full rounded-l-2xl bg-sky-500"></div>
+                    <div class="px-6 pt-4 pb-3 border-b border-sky-100 ml-2">
+                        <h4 class="text-sm font-black uppercase tracking-widest text-sky-700">Special Needs Information</h4>
+                        <p class="text-xs text-sky-700 mt-0.5">Shown only when the enrollee submitted SPED or PWD-related information.</p>
+                    </div>
+                    <div class="p-5 ml-2 grid grid-cols-1 md:grid-cols-3 gap-4" id="eval-special-needs-grid"></div>
+                </div>
+
                 <!-- Documents Checklist -->
                 <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden relative">
                     <div class="absolute top-0 left-0 w-2 h-full rounded-l-2xl" style="background:#6d28d9"></div>
@@ -262,7 +290,7 @@ function eval_full_name($row) {
                     <div class="absolute top-0 left-0 w-2 h-full rounded-l-2xl" style="background:#0ea5e9"></div>
                     <div class="px-6 pt-4 pb-3 border-b border-slate-100 ml-2">
                         <h4 class="text-sm font-black uppercase tracking-widest" style="color:#0ea5e9" id="eval-pathway-section-title">Available Career Pathways</h4>
-                        <p class="text-xs text-slate-500 mt-0.5">Select the final <span id="eval-pathway-label-hint">career pathway</span> for this enrollee. <span class="font-semibold text-slate-400">(Slot tracking not yet connected)</span></p>
+                        <p class="text-xs text-slate-500 mt-0.5">Select the final <span id="eval-pathway-label-hint">career pathway</span> for this enrollee based on currently available classroom slots.</p>
                     </div>
                     <div class="p-5 ml-2 grid grid-cols-2 md:grid-cols-3 gap-3" id="eval-pathway-grid"></div>
                     <input type="hidden" name="final_pathway" id="eval-final-pathway">
@@ -466,6 +494,7 @@ function eval_full_name($row) {
 
 <script>
 const EVAL_CATALOG = <?php echo json_encode($catalog_for_js, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
+const EVAL_CLASSROOMS = <?php echo json_encode($classroom_rows, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP); ?>;
 
 let currentEvalStudent = null;
 
@@ -491,6 +520,75 @@ function pathwayLabel(gradeLevel, code) {
     return m ? `${m.label}` : tod(code);
 }
 
+function slotSummary(gradeLevel, code) {
+    const matching = EVAL_CLASSROOMS.filter(classroom =>
+        String(classroom.grade_level || '').toLowerCase() === String(gradeLevel || '').toLowerCase() &&
+        String(classroom.pathway_strand || '').toLowerCase() === String(code || '').toLowerCase()
+    );
+
+    if (matching.length === 0) {
+        return { text: 'No classroom yet', tone: 'text-slate-400 font-semibold' };
+    }
+
+    const totals = matching.reduce((acc, classroom) => {
+        acc.capacity += parseInt(classroom.max_capacity, 10) || 0;
+        acc.enrolled += parseInt(classroom.enrolled, 10) || 0;
+        return acc;
+    }, { capacity: 0, enrolled: 0 });
+
+    const available = Math.max(0, totals.capacity - totals.enrolled);
+    if (available <= 0) {
+        return { text: `Full (${totals.enrolled}/${totals.capacity})`, tone: 'text-red-600 font-bold' };
+    }
+
+    return {
+        text: `${available} slot${available !== 1 ? 's' : ''} available (${totals.enrolled}/${totals.capacity})`,
+        tone: 'text-emerald-600 font-bold'
+    };
+}
+
+function classifyDistanceZone(student) {
+    const cityNormalized = String(student.city || '').trim().toLowerCase();
+    const brgy = String(student.barangay || '').trim().toLowerCase();
+    const isDavaoCity = cityNormalized === 'davao city' || cityNormalized === 'city of davao';
+    if (!isDavaoCity || !brgy) return null;
+
+    const nearBarangays = [
+        'matina crossing',
+        'matina aplaya',
+        'ecoland',
+        'bangkal',
+        'matina pangi'
+    ];
+
+    const restrictedBarangays = [
+        'calinan',
+        'toril',
+        'sasa',
+        'panacan',
+        'maramag',
+        'marahan',
+        'sibulan'
+    ];
+
+    const warningBarangays = [
+        'talomo',
+        'ma-a',
+        'maa',
+        'sandawa',
+        'mintal',
+        'tugbok',
+        'buhangin',
+        'el rio',
+        'elrio'
+    ];
+
+    if (nearBarangays.some(w => brgy.includes(w))) return null;
+    if (restrictedBarangays.some(w => brgy.includes(w))) return 'restricted';
+    if (warningBarangays.some(w => brgy.includes(w))) return 'warning';
+    return 'warning';
+}
+
 function openEvalModal(student) {
     currentEvalStudent = student;
     document.getElementById('eval-modal-name').textContent = evalFullName(student);
@@ -507,6 +605,64 @@ function openEvalModal(student) {
         infoCard('School Year', student.school_year),
         infoCard('Filed', student.created_at ? new Date(student.created_at).toLocaleDateString('en-PH', {year:'numeric',month:'short',day:'numeric'}) : '--'),
     ].join('');
+
+    const distancePanel = document.getElementById('eval-distance-panel');
+    const distanceCaption = document.getElementById('eval-distance-caption');
+    const distanceGrid = document.getElementById('eval-distance-grid');
+    const distanceZone = classifyDistanceZone(student);
+    if (distanceZone) {
+        const panelTone = distanceZone === 'restricted'
+            ? {
+                panel: 'bg-red-50 border-red-200',
+                bar: 'bg-red-500',
+                title: 'text-red-700',
+                caption: 'Enrollee address is from a far Davao City barangay. Please review travel feasibility carefully before proceeding.',
+                badge: 'Far Davao City Barangay'
+            }
+            : {
+                panel: 'bg-amber-50 border-amber-200',
+                bar: 'bg-amber-500',
+                title: 'text-amber-700',
+                caption: 'Enrollee address is from a warning-distance Davao City barangay. Confirm travel commitment during evaluation.',
+                badge: 'Warning Distance'
+            };
+
+        distancePanel.className = `bg-white rounded-2xl border overflow-hidden relative ${panelTone.panel}`;
+        distancePanel.querySelector('.absolute').className = `absolute top-0 left-0 w-2 h-full rounded-l-2xl ${panelTone.bar}`;
+        distancePanel.querySelector('h4').className = `text-sm font-black uppercase tracking-widest ${panelTone.title}`;
+        distanceCaption.textContent = panelTone.caption;
+        distanceGrid.innerHTML = [
+            infoCard('Distance Status', panelTone.badge),
+            infoCard('Barangay', student.barangay),
+            infoCard('Living With', student.living_with),
+        ].join('');
+        distancePanel.classList.remove('hidden');
+    } else {
+        distanceGrid.innerHTML = '';
+        distanceCaption.textContent = '';
+        distancePanel.classList.add('hidden');
+    }
+
+    const specialNeedsPanel = document.getElementById('eval-special-needs-panel');
+    const specialNeedsGrid = document.getElementById('eval-special-needs-grid');
+    const hasSped = String(student.sped || '').trim().toLowerCase() === 'yes' || String(student.sped_diagnosis || '').trim() !== '';
+    const hasPwd = String(student.pwd || '').trim().toLowerCase() === 'yes' || String(student.pwd_id || '').trim() !== '';
+    if (hasSped || hasPwd) {
+        const cards = [];
+        if (hasSped) {
+            cards.push(infoCard('SPED', String(student.sped || '').trim() || 'Yes'));
+            cards.push(infoCard('SPED Diagnosis', student.sped_diagnosis));
+        }
+        if (hasPwd) {
+            cards.push(infoCard('PWD', String(student.pwd || '').trim() || 'Yes'));
+            cards.push(infoCard('PWD ID', student.pwd_id));
+        }
+        specialNeedsGrid.innerHTML = cards.join('');
+        specialNeedsPanel.classList.remove('hidden');
+    } else {
+        specialNeedsGrid.innerHTML = '';
+        specialNeedsPanel.classList.add('hidden');
+    }
 
     // Documents checklist — SF09 for regular, AF-5 for ALS
     const isALS = (student.student_type || '').toLowerCase().includes('als');
@@ -556,23 +712,29 @@ function openEvalModal(student) {
             ? `<p class="col-span-3 text-sm text-slate-400">No ${sectionLabel.toLowerCase()}s found for this grade level.</p>`
             : options.map(opt => {
                 const isSelected = String(opt.code).toLowerCase() === String(selectedPathway).toLowerCase();
+                const slots = slotSummary(student.grade_level, opt.code);
                 return `<button type="button"
                     class="eval-pathway-card text-left rounded-xl border-2 p-4 transition-all ${isSelected ? 'border-dranhs-green bg-emerald-50 ring-2 ring-dranhs-green/30' : 'border-slate-200 bg-white hover:border-sky-400 hover:bg-sky-50'}"
-                    data-code="${opt.code}">
+                    data-code="${opt.code}"
+                    data-selected="${isSelected ? '1' : '0'}"
+                    data-slot-text="${slots.text}">
                     <p class="text-xs font-black uppercase tracking-wider ${isSelected ? 'text-dranhs-green' : 'text-slate-400'} mb-1">${opt.track || ''}</p>
                     <p class="text-sm font-bold text-slate-800">${opt.label}</p>
-                    <p class="text-xs text-slate-400 mt-1 font-mono">${opt.code}</p>
                     <div class="mt-2 flex items-center gap-1.5">
                         <span class="w-2 h-2 rounded-full ${isSelected ? 'bg-dranhs-green' : 'bg-slate-300'} inline-block"></span>
-                        <span class="text-xs ${isSelected ? 'text-dranhs-green font-bold' : 'text-slate-400 font-semibold'}">
+                        <span class="eval-pathway-status text-xs ${isSelected ? 'text-dranhs-green font-bold' : slots.tone}">
                             ${isSelected ? '✓ Selected' : 'Slots: N/A'}
                         </span>
                     </div>
                 </button>`;
             }).join('');
 
-        // Wire card clicks
+        // Apply status labels and wire card clicks
         document.querySelectorAll('.eval-pathway-card').forEach(card => {
+            const status = card.querySelector('.eval-pathway-status');
+            if (status) {
+                status.textContent = card.dataset.selected === '1' ? 'Selected' : (card.dataset.slotText || 'No classroom yet');
+            }
             card.addEventListener('click', function () {
                 selectedPathway = this.dataset.code;
                 document.getElementById('eval-form-final-pathway').value = selectedPathway;

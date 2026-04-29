@@ -5,12 +5,18 @@ $list_conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
 $toast_msg = ''; $toast_type = 'success';
 $stem_rows = []; $g11_rows = []; $watch_rows = [];
 $g11_sections = [];
+$stem_qualifier_enabled = true;
 
 // School year from settings
 $school_year = date('Y') . ' - ' . (date('Y')+1);
 if (!$list_conn->connect_error) {
     $sy = $list_conn->query("SELECT setting_value FROM system_settings WHERE setting_key='academic_year'");
     if ($sy && $r = $sy->fetch_assoc()) $school_year = $r['setting_value'];
+
+    $stem_toggle_result = $list_conn->query("SELECT setting_value FROM system_settings WHERE setting_key='stem_qualifier_enabled' LIMIT 1");
+    if ($stem_toggle_result && ($stem_toggle_row = $stem_toggle_result->fetch_assoc())) {
+        $stem_qualifier_enabled = (($stem_toggle_row['setting_value'] ?? '1') === '1');
+    }
 }
 
 $stem_clusters = [
@@ -145,7 +151,32 @@ if (!$list_conn->connect_error) {
         $action = $_POST['list_action'];
 
         // ---- STEM ----
-        if ($action === 'add_stem') {
+        if ($action === 'toggle_stem_qualifier') {
+            $stem_qualifier_enabled = isset($_POST['stem_qualifier_enabled']);
+            $setting_value = $stem_qualifier_enabled ? '1' : '0';
+            $update = $list_conn->prepare("UPDATE system_settings SET setting_value = ? WHERE setting_key = 'stem_qualifier_enabled'");
+            if ($update) {
+                $update->bind_param("s", $setting_value);
+                $update->execute();
+                $needs_insert = $update->affected_rows === 0;
+                $update->close();
+
+                if ($needs_insert) {
+                    $check = $list_conn->query("SELECT setting_key FROM system_settings WHERE setting_key = 'stem_qualifier_enabled'");
+                    if ($check && $check->num_rows === 0) {
+                        $insert = $list_conn->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('stem_qualifier_enabled', ?)");
+                        if ($insert) {
+                            $insert->bind_param("s", $setting_value);
+                            $insert->execute();
+                            $insert->close();
+                        }
+                    }
+                }
+            }
+            $toast_msg = $stem_qualifier_enabled
+                ? 'STEM qualifier restriction is now ON. Only listed qualifiers can choose restricted STEM clusters.'
+                : 'STEM qualifier restriction is now OFF. Students may freely choose any STEM cluster.';
+        } elseif ($action === 'add_stem') {
             $ln = trim($_POST['last_name']??''); $fn = trim($_POST['first_name']??'');
             $mn = trim($_POST['middle_name']??''); $lrn = normalize_lrn($_POST['lrn']??'');
             $ga_input = $_POST['general_average'] ?? '';
@@ -389,6 +420,28 @@ foreach ($g11_rows as $row) {
             <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
                 <div class="xl:col-span-1">
                     <div class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                        <div class="rounded-2xl border <?php echo $stem_qualifier_enabled ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'; ?> p-4 mb-5">
+                            <div class="flex items-start justify-between gap-4">
+                                <div>
+                                    <p class="text-xs font-black uppercase tracking-widest <?php echo $stem_qualifier_enabled ? 'text-emerald-700' : 'text-amber-700'; ?>">STEM Restriction</p>
+                                    <h3 class="text-base font-heading font-black text-dranhs-dark mt-1"><?php echo $stem_qualifier_enabled ? 'Restriction Enabled' : 'Restriction Disabled'; ?></h3>
+                                    <p class="text-xs text-slate-600 mt-2">
+                                        <?php echo $stem_qualifier_enabled
+                                            ? 'Only students listed here can choose the restricted STEM clusters.'
+                                            : 'All students may choose any STEM cluster. Qualifier records stay saved, but they are not enforced.'; ?>
+                                    </p>
+                                </div>
+                                <form method="POST" class="shrink-0">
+                                    <input type="hidden" name="list_action" value="toggle_stem_qualifier">
+                                    <label class="inline-flex items-center cursor-pointer select-none">
+                                        <input type="checkbox" name="stem_qualifier_enabled" value="1" class="sr-only peer" <?php echo $stem_qualifier_enabled ? 'checked' : ''; ?> onchange="this.form.submit()">
+                                        <span class="relative w-14 h-8 rounded-full transition-colors <?php echo $stem_qualifier_enabled ? 'bg-emerald-500' : 'bg-slate-300'; ?> peer-focus:ring-4 peer-focus:ring-emerald-200">
+                                            <span class="absolute top-1 left-1 h-6 w-6 rounded-full bg-white shadow transition-transform <?php echo $stem_qualifier_enabled ? 'translate-x-6' : 'translate-x-0'; ?>"></span>
+                                        </span>
+                                    </label>
+                                </form>
+                            </div>
+                        </div>
                         <h3 class="text-lg font-heading font-black text-dranhs-dark">Add STEM Qualifier</h3>
                         <form method="POST" class="mt-4 space-y-3">
                             <input type="hidden" name="list_action" value="add_stem">

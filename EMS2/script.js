@@ -160,7 +160,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (g12LrnStatus) g12LrnStatus.className = 'hidden';
 
                 try {
-                    const res = await fetch('check_lrn.php?lrn=' + encodeURIComponent(lrn));
+                    const res = await fetch('scripts/check_lrn.php?lrn=' + encodeURIComponent(lrn), {
+                        headers: { 'Accept': 'application/json' }
+                    });
+                    if (!res.ok) {
+                        throw new Error('LRN verification request failed.');
+                    }
                     const data = await res.json();
 
                     if (!data.ok) {

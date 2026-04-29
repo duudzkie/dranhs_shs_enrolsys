@@ -109,9 +109,10 @@ if ($conn->connect_error) {
                         : 'Please select a valid section and adviser.');
                 $toast_type = 'error';
             }
-        } elseif ($_POST['cr_action'] === 'update_capacity') {
+        } elseif ($_POST['cr_action'] === 'update_classroom') {
             $cid = (int)($_POST['classroom_id'] ?? 0);
             $cap = (int)($_POST['max_capacity'] ?? 40);
+            $adviser_id = (int)($_POST['adviser_id'] ?? 0);
             $pwd = $_POST['confirm_password'] ?? '';
             // Verify admin password
             $uid = $_SESSION['user_id'] ?? 0;
@@ -121,11 +122,39 @@ if ($conn->connect_error) {
                 if ($s) { $s->bind_param("i",$uid); $s->execute(); $r=$s->get_result()->fetch_assoc(); $s->close(); $ok = $r && password_verify($pwd,$r['password']); }
             }
             if ($ok && $cid > 0) {
-                $stmt = $conn->prepare("UPDATE classrooms SET max_capacity=? WHERE id=?");
-                if ($stmt) { $stmt->bind_param("ii",$cap,$cid); $stmt->execute(); $stmt->close(); }
-                $toast_message = 'Capacity updated.';
+                $adviser_name = null;
+                if ($adviser_id > 0) {
+                    $adv_stmt = $conn->prepare("SELECT name FROM advisers_accounts WHERE id = ? LIMIT 1");
+                    if ($adv_stmt) {
+                        $adv_stmt->bind_param("i", $adviser_id);
+                        $adv_stmt->execute();
+                        $adv_row = $adv_stmt->get_result()->fetch_assoc();
+                        $adv_stmt->close();
+                        $adviser_name = trim((string)($adv_row['name'] ?? ''));
+                    }
+                    if ($adviser_name === '') {
+                        $toast_message = 'Selected adviser was not found.';
+                        $toast_type = 'error';
+                        $ok = false;
+                    }
+                }
+
+                if ($ok && $adviser_id > 0) {
+                    $clear_old = $conn->prepare("UPDATE classrooms SET adviser_id = NULL, adviser_name = NULL WHERE adviser_id = ? AND id <> ?");
+                    if ($clear_old) {
+                        $clear_old->bind_param("ii", $adviser_id, $cid);
+                        $clear_old->execute();
+                        $clear_old->close();
+                    }
+                }
+
+                if ($ok) {
+                    $stmt = $conn->prepare("UPDATE classrooms SET adviser_id = ?, adviser_name = ?, max_capacity = ? WHERE id = ?");
+                    if ($stmt) { $stmt->bind_param("isii", $adviser_id, $adviser_name, $cap, $cid); $stmt->execute(); $stmt->close(); }
+                    $toast_message = 'Classroom updated successfully.';
+                }
             } else {
-                $toast_message = 'Incorrect password. Capacity not changed.';
+                $toast_message = 'Incorrect password. Classroom was not updated.';
                 $toast_type = 'error';
             }
         } elseif ($_POST['cr_action'] === 'delete') {
@@ -145,23 +174,87 @@ if ($conn->connect_error) {
                 $toast_message = 'Incorrect password. Classroom not deleted.';
                 $toast_type = 'error';
             }
-        } elseif ($_POST['cr_action'] === 'reassign_student_section') {
+        } elseif ($_POST['cr_action'] === 'reassign_student_complete') {
             $student_id = (int)($_POST['student_id'] ?? 0);
+            $new_pathway = trim($_POST['new_pathway_strand'] ?? '');
             $new_section = trim($_POST['assigned_section'] ?? '');
+            
             if ($student_id > 0 && $new_section !== '') {
-                $stmt = $conn->prepare("UPDATE students SET assigned_section = ? WHERE id = ?");
-                if ($stmt) {
-                    $stmt->bind_param("si", $new_section, $student_id);
-                    $stmt->execute();
-                    $stmt->close();
+                // Get student's current info and validate new section
+                $stud_check = $conn->prepare("SELECT grade_level FROM students WHERE id = ?");
+                if ($stud_check) {
+                    $stud_check->bind_param("i", $student_id);
+                    $stud_check->execute();
+                    $stud_row = $stud_check->get_result()->fetch_assoc();
+                    $stud_check->close();
+                    
+                    if ($stud_row) {
+                        // Check if new section exists and get its capacity
+                        $sec_check = $conn->prepare("SELECT id, max_capacity, grade_level FROM classrooms WHERE section_name = ? AND grade_level = ? LIMIT 1");
+                        if ($sec_check) {
+                            $sec_check->bind_param("ss", $new_section, $stud_row['grade_level']);
+                            $sec_check->execute();
+                            $sec_row = $sec_check->get_result()->fetch_assoc();
+                            $sec_check->close();
+                            
+                            if ($sec_row) {
+                                // Count current enrolled students in target section
+                                $cap_check = $conn->prepare("SELECT COUNT(*) as cnt FROM students WHERE assigned_section = ? AND enrollment_status = 'enrolled'");
+                                if ($cap_check) {
+                                    $cap_check->bind_param("s", $new_section);
+                                    $cap_check->execute();
+                                    $cap_row = $cap_check->get_result()->fetch_assoc();
+                                    $cap_check->close();
+                                    
+                                    $current_enrolled = (int)$cap_row['cnt'];
+                                    $max_cap = (int)$sec_row['max_capacity'];
+                                    
+                                    // Check if target section is full
+                                    if ($current_enrolled >= $max_cap) {
+                                        $toast_message = "Cannot reassign: Section '{$new_section}' is at full capacity ({$current_enrolled}/{$max_cap}). Remove a student first.";
+                                        $toast_type = 'error';
+                                    } else {
+                                        // Check if reassigning pathway/strand
+                                        $update_stmt = $conn->prepare("UPDATE students SET assigned_section = ? WHERE id = ?");
+                                        if ($new_pathway !== '') {
+                                            $update_stmt = $conn->prepare("UPDATE students SET assigned_section = ?, pathway_strand = ? WHERE id = ?");
+                                            $update_stmt->bind_param("ssi", $new_section, $new_pathway, $student_id);
+                                        } else {
+                                            $update_stmt->bind_param("si", $new_section, $student_id);
+                                        }
+                                        $update_stmt->execute();
+                                        $update_stmt->close();
+                                        
+                                        // Update encodings table as well
+                                        $enc_stmt = $conn->prepare("UPDATE encodings SET assigned_section = ? WHERE student_id = ?");
+                                        if ($enc_stmt) {
+                                            $enc_stmt->bind_param("si", $new_section, $student_id);
+                                            $enc_stmt->execute();
+                                            $enc_stmt->close();
+                                        }
+                                        
+                                        if ($new_pathway !== '') {
+                                            $enc_ps_stmt = $conn->prepare("UPDATE encodings SET pathway_strand = ? WHERE student_id = ?");
+                                            if ($enc_ps_stmt) {
+                                                $enc_ps_stmt->bind_param("si", $new_pathway, $student_id);
+                                                $enc_ps_stmt->execute();
+                                                $enc_ps_stmt->close();
+                                            }
+                                        }
+                                        
+                                        $toast_message = 'Student reassigned successfully to ' . htmlspecialchars($new_section) . ($new_pathway !== '' ? ' and pathway/strand updated' : '') . '.';
+                                    }
+                                }
+                            } else {
+                                $toast_message = 'Selected section not found.';
+                                $toast_type = 'error';
+                            }
+                        }
+                    } else {
+                        $toast_message = 'Student not found.';
+                        $toast_type = 'error';
+                    }
                 }
-                $enc_stmt = $conn->prepare("UPDATE encodings SET assigned_section = ? WHERE student_id = ?");
-                if ($enc_stmt) {
-                    $enc_stmt->bind_param("si", $new_section, $student_id);
-                    $enc_stmt->execute();
-                    $enc_stmt->close();
-                }
-                $toast_message = 'Student section reassigned successfully.';
             } else {
                 $toast_message = 'Please choose a valid section for reassignment.';
                 $toast_type = 'error';
@@ -309,7 +402,9 @@ function default_capacity($grade_level, $track) {
                             class="cr-capacity-btn inline-flex items-center justify-center w-8 h-8 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-colors"
                             data-id="<?php echo (int)$cr['id'];?>"
                             data-name="<?php echo htmlspecialchars($cr['section_name'],ENT_QUOTES);?>"
-                            data-cap="<?php echo $cap;?>" title="Edit Capacity">
+                            data-cap="<?php echo $cap;?>"
+                            data-adviser-id="<?php echo (int)($cr['adviser_id'] ?? 0);?>"
+                            title="Edit Classroom">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                         </button>
                         <!-- Delete -->
@@ -398,19 +493,25 @@ function default_capacity($grade_level, $track) {
     </div>
 </div>
 
-<!-- ===== CAPACITY MODAL ===== -->
+<!-- ===== CLASSROOM EDIT MODAL ===== -->
 <div id="cr-cap-modal" class="fixed inset-0 z-50 hidden">
     <div class="absolute inset-0 bg-slate-900/60" id="cr-cap-backdrop"></div>
     <div class="relative z-10 min-h-screen flex items-center justify-center p-4">
         <div class="w-full max-w-sm bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
             <div class="bg-dranhs-dark px-6 py-4 flex items-center justify-between">
-                <h3 class="font-heading font-black text-lg text-white">Edit Capacity</h3>
+                <h3 class="font-heading font-black text-lg text-white">Edit Classroom</h3>
                 <button type="button" id="cr-cap-close" class="w-9 h-9 rounded-full bg-white/10 text-white hover:bg-white/20 text-xl flex items-center justify-center">&times;</button>
             </div>
             <form method="POST" class="p-6 space-y-4">
-                <input type="hidden" name="cr_action" value="update_capacity">
+                <input type="hidden" name="cr_action" value="update_classroom">
                 <input type="hidden" name="classroom_id" id="cr-cap-id">
-                <p class="text-sm text-slate-600">Editing capacity for: <span id="cr-cap-section-name" class="font-bold text-dranhs-dark"></span></p>
+                <p class="text-sm text-slate-600">Editing classroom for: <span id="cr-cap-section-name" class="font-bold text-dranhs-dark"></span></p>
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Adviser</label>
+                    <select name="adviser_id" id="cr-cap-adviser-id" class="w-full bg-white border-2 border-slate-300 px-4 py-3 rounded-xl text-sm font-medium focus:border-dranhs-green outline-none" required>
+                        <option value="">Select Adviser...</option>
+                    </select>
+                </div>
                 <div class="flex items-center gap-3">
                     <button type="button" id="cr-cap-minus" class="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 font-black text-xl hover:bg-slate-200 transition-colors flex items-center justify-center">−</button>
                     <input type="number" name="max_capacity" id="cr-cap-value" min="1" max="100" class="flex-1 text-center bg-white border-2 border-slate-300 px-4 py-3 rounded-xl text-lg font-black focus:border-dranhs-green outline-none">
@@ -489,24 +590,39 @@ function default_capacity($grade_level, $track) {
         <div class="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
             <div class="bg-dranhs-dark px-6 py-5 flex items-center justify-between">
                 <div>
-                    <p class="text-xs font-bold uppercase tracking-widest text-amber-400 mb-1">Section Reassignment</p>
+                    <p class="text-xs font-bold uppercase tracking-widest text-amber-400 mb-1">Student Reassignment</p>
                     <h3 id="cr-reassign-title" class="font-heading font-black text-xl text-white">Reassign Student</h3>
                 </div>
                 <button type="button" id="cr-reassign-close" class="w-9 h-9 rounded-full bg-white/10 text-white hover:bg-white/20 text-xl flex items-center justify-center">&times;</button>
             </div>
             <form method="POST" class="p-6 space-y-4">
-                <input type="hidden" name="cr_action" value="reassign_student_section">
+                <input type="hidden" name="cr_action" value="reassign_student_complete">
                 <input type="hidden" name="student_id" id="cr-reassign-student-id">
                 <div class="rounded-xl bg-amber-50 border border-amber-100 px-4 py-3">
                     <p class="text-xs font-bold uppercase tracking-wider text-amber-600">Current Student</p>
                     <p id="cr-reassign-student-name" class="text-sm font-bold text-slate-700 mt-1">Student Name</p>
+                    <p id="cr-reassign-current-info" class="text-xs text-amber-700 mt-2">Current Section & Pathway</p>
                 </div>
+                
+                <div id="cr-reassign-pathway-wrap">
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Career Pathway / Strand</label>
+                    <select name="new_pathway_strand" id="cr-reassign-pathway" class="w-full bg-white border-2 border-slate-300 px-4 py-3 rounded-xl text-sm font-medium focus:border-dranhs-green outline-none">
+                        <option value="">Keep Current...</option>
+                    </select>
+                </div>
+                
                 <div>
                     <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">New Section</label>
                     <select name="assigned_section" id="cr-reassign-section" class="w-full bg-white border-2 border-slate-300 px-4 py-3 rounded-xl text-sm font-medium focus:border-dranhs-green outline-none" required>
                         <option value="">Select Section...</option>
                     </select>
                 </div>
+                
+                <div id="cr-reassign-capacity-info" class="rounded-xl bg-blue-50 border border-blue-100 px-4 py-3 text-sm hidden">
+                    <p class="text-xs font-bold uppercase text-blue-600">Section Capacity Status</p>
+                    <p id="cr-reassign-capacity-text" class="text-blue-700 font-semibold mt-1">--</p>
+                </div>
+                
                 <div class="flex justify-end gap-3 pt-1">
                     <button type="button" id="cr-reassign-cancel" class="px-5 py-2.5 rounded-xl border-2 border-slate-300 text-slate-600 font-bold text-sm hover:bg-slate-50">Cancel</button>
                     <button type="submit" class="px-5 py-2.5 rounded-xl bg-amber-500 text-white font-bold text-sm hover:bg-amber-600 shadow-md">Save Reassignment</button>
@@ -559,7 +675,14 @@ const ENROLLED_DATA = <?php
     $conn2 = new mysqli($db_host, $db_user, $db_pass, $db_name);
     $all_enrolled = [];
     if (!$conn2->connect_error) {
-        $er = $conn2->query("SELECT id, last_name, first_name, middle_name, extension_name, lrn, sex, grade_level, track, pathway_strand, assigned_section, enrollment_status FROM students WHERE enrollment_status IN ('for_encoding','enrolled') ORDER BY last_name, first_name");
+        $er = $conn2->query("SELECT students.id, students.last_name, students.first_name, students.middle_name, students.extension_name, students.lrn, students.sex, students.grade_level, students.track, students.pathway_strand, students.assigned_section, students.enrollment_status,
+            watchlist.issue_type AS watch_issue_type, watchlist.issue_details AS watch_issue_details
+            FROM students
+            LEFT JOIN watchlist
+                ON watchlist.lrn = students.lrn
+               AND watchlist.school_year = students.school_year
+            WHERE students.enrollment_status IN ('for_encoding','enrolled')
+            ORDER BY students.last_name, students.first_name");
         if ($er) { while ($row = $er->fetch_assoc()) $all_enrolled[] = $row; $er->close(); }
         $conn2->close();
     }
@@ -616,6 +739,28 @@ function sectionChoices(gradeLevel) {
 function adviserChoices() {
     const locked = lockedAdviserIds();
     return CR_ADVISERS.map(adviser => ({ ...adviser, locked: locked.has(String(adviser.id)) }));
+}
+
+function populateEditAdviserOptions(selectedAdviserId, currentClassroomId) {
+    const advSel = document.getElementById('cr-cap-adviser-id');
+    if (!advSel) return;
+    advSel.innerHTML = '<option value="">Select Adviser...</option>';
+    if (!Array.isArray(CR_ADVISERS) || CR_ADVISERS.length === 0) {
+        const option = document.createElement('option');
+        option.disabled = true;
+        option.textContent = 'No advisers found - add them in Account page';
+        advSel.appendChild(option);
+        return;
+    }
+
+    CR_ADVISERS.forEach(adviser => {
+        const assigned = CR_CLASSROOMS.find(c => String(c.adviser_id || '') === String(adviser.id) && String(c.id || '') !== String(currentClassroomId || ''));
+        const option = document.createElement('option');
+        option.value = adviser.id;
+        option.textContent = assigned ? `${adviser.name} (${assigned.section_name})` : adviser.name;
+        if (String(adviser.id) === String(selectedAdviserId || '')) option.selected = true;
+        advSel.appendChild(option);
+    });
 }
 
 function openModal(modal) {
@@ -753,6 +898,7 @@ document.querySelectorAll('.cr-capacity-btn').forEach(btn => btn.addEventListene
     document.getElementById('cr-cap-id').value = this.dataset.id;
     document.getElementById('cr-cap-section-name').textContent = this.dataset.name;
     document.getElementById('cr-cap-value').value = this.dataset.cap;
+    populateEditAdviserOptions(this.dataset.adviserId || '', this.dataset.id || '');
     openModal(capModal);
 }));
 document.getElementById('cr-cap-close').addEventListener('click', function () { closeModal(capModal); });
@@ -778,27 +924,140 @@ document.getElementById('cr-del-backdrop').addEventListener('click', function ()
 
 function renderReassignSectionOptions(student) {
     const select = document.getElementById('cr-reassign-section');
-    const sections = CR_CLASSROOMS
+    const capacityInfo = document.getElementById('cr-reassign-capacity-info');
+    
+    // Get all sections for the student's grade level and current pathway
+    const sectionsByPathway = {};
+    CR_CLASSROOMS
         .filter(c => String(c.grade_level || '').toLowerCase() === String(student.grade_level || '').toLowerCase())
-        .filter(c => String(c.pathway_strand || '').toLowerCase() === String(student.pathway_strand || '').toLowerCase())
-        .sort((a, b) => String(a.section_name || '').localeCompare(String(b.section_name || ''), undefined, { sensitivity: 'base' }));
+        .forEach(classroom => {
+            const pathway = String(classroom.pathway_strand || '').toLowerCase();
+            if (!sectionsByPathway[pathway]) sectionsByPathway[pathway] = [];
+            sectionsByPathway[pathway].push(classroom);
+        });
+    
+    // Get sections for current pathway first
+    const currentPathway = String(student.pathway_strand || '').toLowerCase();
+    const sections = sectionsByPathway[currentPathway] || [];
+    
+    // Store sections globally for use in change event listener
+    window.CR_CURRENT_SECTIONS = sections;
+    
     select.innerHTML = '<option value="">Select Section...</option>';
+    
+    if (sections.length === 0) {
+        const option = document.createElement('option');
+        option.disabled = true;
+        option.textContent = 'No sections available for this pathway/grade level.';
+        select.appendChild(option);
+        return;
+    }
+    
     sections.forEach(section => {
+        const enrolled = ENROLLED_DATA.filter(s => 
+            String(s.assigned_section || '').toLowerCase() === String(section.section_name || '').toLowerCase() &&
+            s.enrollment_status === 'enrolled'
+        ).length;
+        
+        const capacity = parseInt(section.max_capacity || 40, 10);
+        const isFull = enrolled >= capacity;
+        const isCurrentSection = String(student.assigned_section || '').toLowerCase() === String(section.section_name || '').toLowerCase();
+        
         const option = document.createElement('option');
         option.value = section.section_name;
-        option.textContent = section.section_name;
-        if (String(student.assigned_section || '').toLowerCase() == String(section.section_name || '').toLowerCase()) option.selected = true;
+        
+        let displayText = section.section_name;
+        if (isCurrentSection) {
+            displayText += ' (Current)';
+        } else if (isFull) {
+            displayText += ` (Full: ${enrolled}/${capacity})`;
+            option.disabled = true;
+            option.style.color = '#dc2626';
+        } else {
+            displayText += ` (${enrolled}/${capacity} slots)`;
+        }
+        
+        option.textContent = displayText;
         select.appendChild(option);
     });
+}
+
+function updateCapacityInfo(sectionName, sections) {
+    const capacityInfo = document.getElementById('cr-reassign-capacity-info');
+    const capacityText = document.getElementById('cr-reassign-capacity-text');
+    
+    if (!sectionName) {
+        capacityInfo.classList.add('hidden');
+        return;
+    }
+    
+    const section = sections.find(s => String(s.section_name || '').toLowerCase() === String(sectionName || '').toLowerCase());
+    if (!section) {
+        capacityInfo.classList.add('hidden');
+        return;
+    }
+    
+    const enrolled = ENROLLED_DATA.filter(s => 
+        String(s.assigned_section || '').toLowerCase() === String(sectionName || '').toLowerCase() &&
+        s.enrollment_status === 'enrolled'
+    ).length;
+    
+    const capacity = parseInt(section.max_capacity || 40, 10);
+    const available = Math.max(0, capacity - enrolled);
+    const isFull = enrolled >= capacity;
+    
+    capacityInfo.classList.remove('hidden');
+    
+    if (isFull) {
+        capacityInfo.classList.remove('bg-blue-50', 'border-blue-100');
+        capacityInfo.classList.add('bg-red-50', 'border-red-100');
+        capacityText.classList.remove('text-blue-700');
+        capacityText.classList.add('text-red-700');
+        capacityText.innerHTML = `<span class="font-black">SECTION IS FULL</span> - ${enrolled}/${capacity} students enrolled. Cannot reassign until a slot opens.`;
+    } else {
+        capacityInfo.classList.remove('bg-red-50', 'border-red-100');
+        capacityInfo.classList.add('bg-blue-50', 'border-blue-100');
+        capacityText.classList.remove('text-red-700');
+        capacityText.classList.add('text-blue-700');
+        capacityText.innerHTML = `<span class="font-semibold">${available} slot(s) available</span> - ${enrolled}/${capacity} enrolled`;
+    }
 }
 
 function bindMasterlistActions() {
     document.querySelectorAll('.cr-reassign-student-btn').forEach(btn => {
         btn.addEventListener('click', function () {
-            const student = JSON.parse(this.dataset.student);
+            const studentId = this.dataset.studentId;
+            const student = ENROLLED_DATA.find(s => s.id == studentId);
+            
+            if (!student) {
+                alert('Student data not found. Please try again.');
+                return;
+            }
+            
             document.getElementById('cr-reassign-student-id').value = student.id || '';
             document.getElementById('cr-reassign-title').textContent = `Reassign ${masterlistName(student)}`;
             document.getElementById('cr-reassign-student-name').textContent = masterlistName(student);
+            
+            // Show current assignment info
+            const currentInfo = document.getElementById('cr-reassign-current-info');
+            const psLabel = pathwayLabel(student.grade_level, student.pathway_strand);
+            currentInfo.textContent = `Currently in: ${student.assigned_section || '--'} | Pathway/Strand: ${psLabel}`;
+            
+            // Populate pathway options
+            const pathwaySelect = document.getElementById('cr-reassign-pathway');
+            const pathwayOptions = (CR_CATALOG[student.grade_level] || []);
+            pathwaySelect.innerHTML = '<option value="">Keep Current...</option>';
+            pathwayOptions.forEach(option => {
+                const opt = document.createElement('option');
+                opt.value = option.code;
+                opt.textContent = option.label;
+                if (String(option.code || '').toLowerCase() === String(student.pathway_strand || '').toLowerCase()) {
+                    opt.selected = true;
+                }
+                pathwaySelect.appendChild(opt);
+            });
+            
+            // Render section options based on current pathway
             renderReassignSectionOptions(student);
             openModal(reassignModal);
         });
@@ -806,7 +1065,14 @@ function bindMasterlistActions() {
 
     document.querySelectorAll('.cr-withdraw-student-btn').forEach(btn => {
         btn.addEventListener('click', function () {
-            const student = JSON.parse(this.dataset.student);
+            const studentId = this.dataset.studentId;
+            const student = ENROLLED_DATA.find(s => s.id == studentId);
+            
+            if (!student) {
+                alert('Student data not found. Please try again.');
+                return;
+            }
+            
             document.getElementById('cr-withdraw-student-id').value = student.id || '';
             document.getElementById('cr-withdraw-title').textContent = `Authorize Withdrawal for ${masterlistName(student)}`;
             document.getElementById('cr-withdraw-student-name').textContent = masterlistName(student);
@@ -872,6 +1138,7 @@ document.querySelectorAll('.cr-masterlist-btn').forEach(btn => btn.addEventListe
                     <th class="px-4 py-3">Name</th>
                     <th class="px-4 py-3">LRN</th>
                     <th class="px-4 py-3">Gender</th>
+                    <th class="px-4 py-3">Remarks</th>
                     <th class="px-4 py-3">Status</th>
                     <th class="px-4 py-3 text-center">Action</th>
                 </tr>
@@ -885,22 +1152,27 @@ document.querySelectorAll('.cr-masterlist-btn').forEach(btn => btn.addEventListe
                     } else {
                         rowNumber += 1;
                     }
+                    const watchIssueType = String(student.watch_issue_type || '').trim();
+                    const watchIssueDetails = String(student.watch_issue_details || '').trim();
                     const badge = student.enrollment_status === 'enrolled'
                         ? '<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-bold">Enrolled</span>'
                         : '<span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">For Encoding</span>';
-                    const payload = JSON.stringify(student).replace(/"/g, '&quot;');
+                    const redFlagBadge = watchIssueType
+                        ? `<span class="text-red-600 font-bold uppercase tracking-wide" title="${watchIssueDetails ? watchIssueDetails.replace(/"/g, '&quot;') : 'No additional notes provided in the watchlist.'}">FLAGGED</span>`
+                        : '<span class="text-slate-300 font-semibold">--</span>';
                     return `<tr class="hover:bg-slate-50">
                         <td class="px-4 py-3 text-slate-400 font-semibold">${rowNumber}</td>
                         <td class="px-4 py-3 font-semibold text-slate-700">${masterlistName(student)}</td>
                         <td class="px-4 py-3 text-slate-500">${student.lrn || '--'}</td>
                         <td class="px-4 py-3 text-slate-500 font-semibold">${student.sex || '--'}</td>
+                        <td class="px-4 py-3">${redFlagBadge}</td>
                         <td class="px-4 py-3">${badge}</td>
                         <td class="px-4 py-3">
                             <div class="flex items-center justify-center gap-2">
-                                <button type="button" class="cr-reassign-student-btn inline-flex items-center justify-center w-9 h-9 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-colors" data-student="${payload}" title="Reassign Section">
+                                <button type="button" class="cr-reassign-student-btn inline-flex items-center justify-center w-9 h-9 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-colors" data-student-id="${student.id || ''}" title="Reassign Section">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 3h4a2 2 0 012 2v4m-6 12H9a2 2 0 01-2-2v-4m10-4H8m0 0l3-3m-3 3l3 3"/></svg>
                                 </button>
-                                <button type="button" class="cr-withdraw-student-btn inline-flex items-center justify-center w-9 h-9 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors" data-student="${payload}" title="Withdraw">
+                                <button type="button" class="cr-withdraw-student-btn inline-flex items-center justify-center w-9 h-9 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors" data-student-id="${student.id || ''}" title="Withdraw">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3m-7 0h8"/></svg>
                                 </button>
                             </div>
@@ -921,6 +1193,28 @@ document.getElementById('cr-ml-print').addEventListener('click', function () {})
 document.getElementById('cr-reassign-close').addEventListener('click', function () { closeModal(reassignModal); });
 document.getElementById('cr-reassign-cancel').addEventListener('click', function () { closeModal(reassignModal); });
 document.getElementById('cr-reassign-backdrop').addEventListener('click', function () { closeModal(reassignModal); });
+
+// Section select change listener for capacity info
+document.getElementById('cr-reassign-section').addEventListener('change', function() {
+    const sections = window.CR_CURRENT_SECTIONS || [];
+    updateCapacityInfo(this.value, sections);
+});
+
+// Pathway change listener for reassign modal
+document.getElementById('cr-reassign-pathway').addEventListener('change', function() {
+    const studentIdInput = document.getElementById('cr-reassign-student-id');
+    const student = ENROLLED_DATA.find(s => s.id == studentIdInput.value);
+    
+    if (student && this.value !== '') {
+        // Update student object with new pathway
+        const updatedStudent = { ...student, pathway_strand: this.value };
+        renderReassignSectionOptions(updatedStudent);
+    } else {
+        // Reset to current pathway
+        renderReassignSectionOptions(student);
+    }
+});
+
 document.getElementById('cr-withdraw-close').addEventListener('click', function () { closeModal(withdrawModal); });
 document.getElementById('cr-withdraw-cancel').addEventListener('click', function () { closeModal(withdrawModal); });
 document.getElementById('cr-withdraw-backdrop').addEventListener('click', function () { closeModal(withdrawModal); });
