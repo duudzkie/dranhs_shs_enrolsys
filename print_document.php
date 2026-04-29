@@ -161,8 +161,8 @@ if ($photo_path && file_exists($photo_abs)) {
     try {
         $tpl->setImageValue('ID_PHOTO', [
             'path'   => $photo_abs,
-            'width'  => 96,
-            'height' => 96,
+            'width'  => 144,
+            'height' => 144,
             'ratio'  => false,
         ]);
     } catch (Exception $e) {
@@ -177,8 +177,8 @@ if ($qr_ok && file_exists($qr_tmp)) {
     try {
         $tpl->setImageValue('QR_CODE', [
             'path'   => $qr_tmp,
-            'width'  => 144,
-            'height' => 144,
+            'width'  => 115,
+            'height' => 115,
             'ratio'  => false,
         ]);
     } catch (Exception $e) {
