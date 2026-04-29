@@ -1013,7 +1013,7 @@ document.getElementById('print-id-btn').addEventListener('click', function () {
 
     // Print ID card button
     document.getElementById('id-assets-print-btn').onclick = function () {
-        window.open('../print_id.php?id=' + _printStudentId, '_blank');
+        window.open('../print_id_doc.php?id=' + _printStudentId, '_blank');
     };
 
     document.getElementById('student-print-modal').classList.add('hidden');

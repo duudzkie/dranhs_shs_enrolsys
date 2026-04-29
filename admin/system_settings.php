@@ -153,22 +153,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         elseif ($_POST['action'] === 'upload_template') {
-            $allowed = ['docx'];
-            $tpl_dir = '../uploads/templates/';
+            $allowed  = ['docx'];
+            $tpl_dir  = '../uploads/templates/';
+            $tpl_type = $_POST['template_type'] ?? 'beef';
             if (!is_dir($tpl_dir)) mkdir($tpl_dir, 0755, true);
+
+            $dest_name = ($tpl_type === 'id') ? 'ID-Temp.docx' : 'BEEF-Temp.docx';
 
             if (isset($_FILES['template_file']) && $_FILES['template_file']['error'] === UPLOAD_ERR_OK) {
                 $fname = $_FILES['template_file']['name'];
                 $ext   = strtolower(pathinfo($fname, PATHINFO_EXTENSION));
                 if (in_array($ext, $allowed)) {
-                    // Always save as BEEF-Temp.docx (the fixed name print_document.php expects)
-                    $dest = $tpl_dir . 'BEEF-Temp.docx';
-                    // Backup old one
+                    $dest = $tpl_dir . $dest_name;
                     if (file_exists($dest)) {
-                        rename($dest, $tpl_dir . 'BEEF-Temp_backup_' . date('Ymd_His') . '.docx');
+                        rename($dest, $tpl_dir . pathinfo($dest_name, PATHINFO_FILENAME) . '_backup_' . date('Ymd_His') . '.docx');
                     }
                     if (move_uploaded_file($_FILES['template_file']['tmp_name'], $dest)) {
-                        $toast_message = 'Template uploaded successfully! Old template backed up.';
+                        $toast_message = $dest_name . ' uploaded successfully! Old template backed up.';
                         $toast_type    = 'success';
                     } else {
                         $toast_message = 'Upload failed. Check folder permissions.';
@@ -974,7 +975,7 @@ function getRoomAssignment($roomNumber, $registries) {
                 </div>
                 <div>
                     <div class="text-sm font-black <?php echo file_exists('../uploads/templates/BEEF-Temp.docx') ? 'text-emerald-800' : 'text-amber-800'; ?>">
-                        <?php echo file_exists('../uploads/templates/BEEF-Temp.docx') ? '✓ Template found — BEEF-Temp.docx' : '⚠ No template uploaded yet'; ?>
+                        <?php echo file_exists('../uploads/templates/BEEF-Temp.docx') ? '✓ Enrollment Form — BEEF-Temp.docx' : '⚠ No enrollment template uploaded yet'; ?>
                     </div>
                     <?php if (file_exists('../uploads/templates/BEEF-Temp.docx')): ?>
                     <div class="text-xs text-emerald-600 mt-0.5">
@@ -982,47 +983,68 @@ function getRoomAssignment($roomNumber, $registries) {
                         &nbsp;·&nbsp;
                         Size: <?php echo round(filesize('../uploads/templates/BEEF-Temp.docx') / 1024, 1); ?> KB
                     </div>
-                    <?php else: ?>
-                    <div class="text-xs text-amber-600 mt-0.5">Upload a .docx template below to enable document printing.</div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+        <div class="mb-6 p-5 rounded-2xl border <?php echo file_exists('../uploads/templates/ID-Temp.docx') ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'; ?>">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 <?php echo file_exists('../uploads/templates/ID-Temp.docx') ? 'bg-emerald-100' : 'bg-amber-100'; ?>">
+                    <svg class="w-5 h-5 <?php echo file_exists('../uploads/templates/ID-Temp.docx') ? 'text-emerald-600' : 'text-amber-600'; ?>" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M7 9h10M7 13h6"/></svg>
+                </div>
+                <div>
+                    <div class="text-sm font-black <?php echo file_exists('../uploads/templates/ID-Temp.docx') ? 'text-emerald-800' : 'text-amber-800'; ?>">
+                        <?php echo file_exists('../uploads/templates/ID-Temp.docx') ? '✓ ID Card Template — ID-Temp.docx' : '⚠ No ID template uploaded yet'; ?>
+                    </div>
+                    <?php if (file_exists('../uploads/templates/ID-Temp.docx')): ?>
+                    <div class="text-xs text-emerald-600 mt-0.5">
+                        Last modified: <?php echo date('F d, Y h:i A', filemtime('../uploads/templates/ID-Temp.docx')); ?>
+                        &nbsp;·&nbsp;
+                        Size: <?php echo round(filesize('../uploads/templates/ID-Temp.docx') / 1024, 1); ?> KB
+                    </div>
                     <?php endif; ?>
                 </div>
             </div>
         </div>
 
-        <!-- Upload Form -->
-        <form action="?page=system_settings" method="POST" enctype="multipart/form-data"
-              class="p-6 bg-white border-2 border-dashed border-slate-300 rounded-2xl hover:border-dranhs-green transition-colors"
-              id="template-upload-form">
-            <input type="hidden" name="action" value="upload_template">
-
-            <div class="flex flex-col items-center gap-4 text-center" id="drop-zone">
-                <div class="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center">
-                    <svg class="w-7 h-7 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+        <!-- Upload Forms — side by side -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
+            <!-- BEEF Template Upload -->
+            <form action="?page=system_settings" method="POST" enctype="multipart/form-data"
+                  class="p-5 bg-white border-2 border-dashed border-slate-300 rounded-2xl hover:border-dranhs-green transition-colors">
+                <input type="hidden" name="action" value="upload_template">
+                <input type="hidden" name="template_type" value="beef">
+                <p class="text-xs font-black uppercase tracking-widest text-slate-500 mb-3">Enrollment Form Template</p>
+                <div class="flex flex-col gap-3">
+                    <label class="cursor-pointer">
+                        <span class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-dranhs-green text-white text-xs font-bold hover:bg-emerald-700 transition-colors">
+                            Choose BEEF-Temp.docx
+                        </span>
+                        <input type="file" name="template_file" accept=".docx" class="hidden" required onchange="this.nextElementSibling.textContent='📄 '+this.files[0].name; this.closest('form').querySelector('button').disabled=false;">
+                    </label>
+                    <span class="text-xs text-slate-400">No file chosen</span>
+                    <button type="submit" disabled class="px-4 py-2 rounded-xl bg-slate-200 text-slate-400 text-xs font-bold cursor-not-allowed">Upload</button>
                 </div>
-                <div>
-                    <p class="text-sm font-bold text-slate-700">Drop your .docx template here</p>
-                    <p class="text-xs text-slate-400 mt-1">or click to browse — only .docx files accepted</p>
-                </div>
-                <label class="cursor-pointer">
-                    <span class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-dranhs-green text-white text-sm font-bold hover:bg-emerald-700 transition-colors">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
-                        Choose File
-                    </span>
-                    <input type="file" name="template_file" id="template-file-input" accept=".docx" class="hidden" required>
-                </label>
-                <div id="file-selected" class="hidden text-sm font-semibold text-dranhs-green"></div>
-            </div>
+            </form>
 
-            <div class="mt-5 pt-5 border-t border-slate-100 flex items-center justify-between">
-                <p class="text-xs text-slate-400">The old template will be automatically backed up before replacing.</p>
-                <button type="submit" id="upload-submit-btn" disabled
-                    class="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-slate-200 text-slate-400 text-sm font-bold cursor-not-allowed transition-colors"
-                    id="upload-btn">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-                    Upload Template
-                </button>
-            </div>
-        </form>
+            <!-- ID Template Upload -->
+            <form action="?page=system_settings" method="POST" enctype="multipart/form-data"
+                  class="p-5 bg-white border-2 border-dashed border-slate-300 rounded-2xl hover:border-blue-400 transition-colors">
+                <input type="hidden" name="action" value="upload_template">
+                <input type="hidden" name="template_type" value="id">
+                <p class="text-xs font-black uppercase tracking-widest text-slate-500 mb-3">ID Card Template</p>
+                <div class="flex flex-col gap-3">
+                    <label class="cursor-pointer">
+                        <span class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-colors">
+                            Choose ID-Temp.docx
+                        </span>
+                        <input type="file" name="template_file" accept=".docx" class="hidden" required onchange="this.nextElementSibling.textContent='📄 '+this.files[0].name; this.closest('form').querySelector('button').disabled=false;">
+                    </label>
+                    <span class="text-xs text-slate-400">No file chosen</span>
+                    <button type="submit" disabled class="px-4 py-2 rounded-xl bg-slate-200 text-slate-400 text-xs font-bold cursor-not-allowed">Upload</button>
+                </div>
+            </form>
+        </div>
 
         <!-- Backups list -->
         <?php
