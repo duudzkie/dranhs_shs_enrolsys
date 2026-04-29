@@ -9,6 +9,8 @@ $advisers = [];
 $db_error = '';
 $toast_message = '';
 $toast_type = 'success';
+$isAdviser = (($_SESSION['role'] ?? '') === 'adviser');
+$adviserSection = $_SESSION['adviser_section'] ?? null;
 
 // Ensure classrooms table exists
 if (!$conn->connect_error) {
@@ -289,9 +291,15 @@ if ($conn->connect_error) {
         }
     }
 
-    $res = $conn->query("SELECT c.*, a.avatar AS adviser_avatar FROM classrooms c LEFT JOIN advisers_accounts a ON a.id = c.adviser_id ORDER BY c.grade_level DESC, c.section_name ASC");
+    if ($isAdviser && $adviserSection) {
+        $res = $conn->prepare("SELECT c.*, a.avatar AS adviser_avatar FROM classrooms c LEFT JOIN advisers_accounts a ON a.id = c.adviser_id WHERE c.section_name = ? ORDER BY c.section_name ASC");
+        $res->bind_param("s", $adviserSection);
+        $res->execute();
+        $res = $res->get_result();
+    } else {
+        $res = $conn->query("SELECT c.*, a.avatar AS adviser_avatar FROM classrooms c LEFT JOIN advisers_accounts a ON a.id = c.adviser_id ORDER BY c.grade_level DESC, c.section_name ASC");
+    }
     if ($res) { while ($row = $res->fetch_assoc()) $classrooms[] = $row; $res->close(); }
-
     // Enrolled count per classroom section
     $enrolled_counts = [];
     $ec = $conn->query("SELECT assigned_section, COUNT(*) as cnt FROM students WHERE enrollment_status='enrolled' AND assigned_section IS NOT NULL AND assigned_section <> '' GROUP BY assigned_section");
@@ -324,7 +332,7 @@ function default_capacity($grade_level, $track) {
                 <input type="text" id="cr-search-input" placeholder="Search sections..." class="w-full bg-slate-50 border border-slate-200 px-4 py-2 pl-10 rounded-lg text-sm focus:border-dranhs-green outline-none transition-colors">
                 <svg class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             </div>
-            <button type="button" id="cr-add-btn" class="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-dranhs-green text-white text-sm font-bold hover:bg-emerald-700 transition-colors">
+            <button type="button" id="cr-add-btn" class="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-dranhs-green text-white text-sm font-bold hover:bg-emerald-700 transition-colors <?php echo $isAdviser ? 'hidden' : ''; ?>">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
                 Add Classroom
             </button>
@@ -399,7 +407,7 @@ function default_capacity($grade_level, $track) {
                         </button>
                         <!-- Edit capacity -->
                         <button type="button"
-                            class="cr-capacity-btn inline-flex items-center justify-center w-8 h-8 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-colors"
+                            class="cr-capacity-btn inline-flex items-center justify-center w-8 h-8 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-colors <?php echo $isAdviser ? 'hidden' : ''; ?>"
                             data-id="<?php echo (int)$cr['id'];?>"
                             data-name="<?php echo htmlspecialchars($cr['section_name'],ENT_QUOTES);?>"
                             data-cap="<?php echo $cap;?>"
@@ -409,7 +417,7 @@ function default_capacity($grade_level, $track) {
                         </button>
                         <!-- Delete -->
                         <button type="button"
-                            class="cr-delete-btn inline-flex items-center justify-center w-8 h-8 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
+                            class="cr-delete-btn inline-flex items-center justify-center w-8 h-8 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition-colors <?php echo $isAdviser ? 'hidden' : ''; ?>"
                             data-id="<?php echo (int)$cr['id'];?>"
                             data-name="<?php echo htmlspecialchars($cr['section_name'],ENT_QUOTES);?>" title="Delete">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3m-7 0h8"/></svg>
@@ -1085,7 +1093,11 @@ document.querySelectorAll('.cr-masterlist-btn').forEach(btn => btn.addEventListe
     const pathway = this.dataset.pathway;
     const grade = this.dataset.grade;
     const name = this.dataset.name;
+    const classroomId = this.dataset.id;
     document.getElementById('cr-ml-title').textContent = name;
+    // Store for print button
+    document.getElementById('cr-ml-print').dataset.section = name;
+    document.getElementById('cr-ml-print').dataset.classroomId = classroomId;
 
     const students = ENROLLED_DATA
         .filter(student => String(student.assigned_section || '').toLowerCase() === String(name || '').toLowerCase())
@@ -1189,7 +1201,13 @@ document.querySelectorAll('.cr-masterlist-btn').forEach(btn => btn.addEventListe
 
 document.getElementById('cr-ml-close').addEventListener('click', function () { closeModal(mlModal); });
 document.getElementById('cr-ml-backdrop').addEventListener('click', function () { closeModal(mlModal); });
-document.getElementById('cr-ml-print').addEventListener('click', function () {});
+document.getElementById('cr-ml-print').addEventListener('click', function () {
+    const section = this.dataset.section || '';
+    const classroomId = this.dataset.classroomId || '';
+    if (section) {
+        window.open('../print_masterlist.php?section=' + encodeURIComponent(section) + '&classroom_id=' + classroomId, '_blank');
+    }
+});
 document.getElementById('cr-reassign-close').addEventListener('click', function () { closeModal(reassignModal); });
 document.getElementById('cr-reassign-cancel').addEventListener('click', function () { closeModal(reassignModal); });
 document.getElementById('cr-reassign-backdrop').addEventListener('click', function () { closeModal(reassignModal); });
