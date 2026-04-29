@@ -155,15 +155,15 @@ $tpl->setValue('PATHWAY_STRAND',   htmlspecialchars($pathway));
 $tpl->setValue('FULL_NAME',        htmlspecialchars($full_name));
 
 // ── Images ────────────────────────────────────────────────────────────────────
-// ID Photo — 1.4" × 1.4" = 134×134px at 96dpi
+// ID Photo — 1.0" × 1.0" = 96px with ratio maintained
 $photo_abs = __DIR__ . '/' . $photo_path;
 if ($photo_path && file_exists($photo_abs)) {
     try {
         $tpl->setImageValue('ID_PHOTO', [
             'path'   => $photo_abs,
-            'width'  => 134,
-            'height' => 134,
-            'ratio'  => false,
+            'width'  => 96,
+            'height' => 96,
+            'ratio'  => true,
         ]);
     } catch (Exception $e) {
         $tpl->setValue('ID_PHOTO', '[Photo]');
@@ -172,14 +172,14 @@ if ($photo_path && file_exists($photo_abs)) {
     $tpl->setValue('ID_PHOTO', '');
 }
 
-// QR Code — 0.9" × 0.9" = 86×86px (fits temp ID box)
+// QR Code — 0.75" × 0.75" = 72px
 if ($qr_ok && file_exists($qr_tmp)) {
     try {
         $tpl->setImageValue('QR_CODE', [
             'path'   => $qr_tmp,
-            'width'  => 86,
-            'height' => 86,
-            'ratio'  => false,
+            'width'  => 72,
+            'height' => 72,
+            'ratio'  => true,
         ]);
     } catch (Exception $e) {
         $tpl->setValue('QR_CODE', '[QR]');
