@@ -67,10 +67,8 @@ $track       = $row['track']        ?: '';
 $pathway     = get_pathway_strand_label($grade_level, $row['pathway_strand'] ?? '');
 $photo_path  = $row['_id_photo_path'] ?? '';
 
-// Sex checkboxes
-$sex = strtolower(trim($row['sex'] ?? ''));
-$sex_male   = ($sex === 'male')   ? '☑' : '☐';
-$sex_female = ($sex === 'female') ? '☑' : '☐';
+// Sex — plain text
+$sex_display = ucfirst(strtolower(trim($row['sex'] ?? ''))) ?: 'N/A';
 
 // Semester
 $sem = trim($row['semester'] ?? '');
@@ -107,8 +105,7 @@ $tpl->setValue('LAST_NAME',        htmlspecialchars(strtoupper($row['last_name']
 $tpl->setValue('FIRST_NAME',       htmlspecialchars(strtoupper($row['first_name']  ?? '')));
 $tpl->setValue('MIDDLE_NAME',      htmlspecialchars(strtoupper($row['middle_name'] ?? '')));
 $tpl->setValue('EXTENSION_NAME',   htmlspecialchars(strtoupper($row['extension_name'] ?? '')));
-$tpl->setValue('SEX_MALE',         $sex_male);
-$tpl->setValue('SEX_FEMALE',       $sex_female);
+$tpl->setValue('SEX',              htmlspecialchars($sex_display));
 $tpl->setValue('BIRTHDATE',        htmlspecialchars($row['birthdate']         ?? ''));
 $tpl->setValue('AGE',              htmlspecialchars($row['age']               ?? ''));
 $tpl->setValue('PLACE_OF_BIRTH',   htmlspecialchars($row['place_of_birth']    ?? ''));
@@ -123,8 +120,8 @@ $tpl->setValue('BARANGAY',         htmlspecialchars($row['barangay']          ??
 $tpl->setValue('CITY',             htmlspecialchars($row['city']              ?? ''));
 $tpl->setValue('PROVINCE',         htmlspecialchars($row['province']          ?? ''));
 $tpl->setValue('ZIP_CODE',         htmlspecialchars($row['zip_code']          ?? ''));
+$tpl->setValue('COUNTRY',          'Philippines');
 $tpl->setValue('LIVING_WITH',      htmlspecialchars($row['living_with']       ?? ''));
-
 // Section 4 — Parents/Guardian
 $tpl->setValue('FATHER_LAST_NAME',    htmlspecialchars(strtoupper($row['father_last_name']    ?? '')));
 $tpl->setValue('FATHER_FIRST_NAME',   htmlspecialchars(strtoupper($row['father_first_name']   ?? '')));
