@@ -70,7 +70,13 @@ if ($conn->connect_error) {
         }
     }
 
-    $res = $conn->query("SELECT * FROM students WHERE enrollment_status='for_encoding' ORDER BY created_at DESC, id DESC");
+    $res = $conn->query("SELECT students.*, watchlist.issue_type AS watch_issue_type, watchlist.issue_details AS watch_issue_details
+        FROM students
+        LEFT JOIN watchlist
+            ON watchlist.lrn = students.lrn
+           AND watchlist.school_year = students.school_year
+        WHERE students.enrollment_status='for_encoding'
+        ORDER BY students.created_at DESC, students.id DESC");
     if ($res) { while ($r = $res->fetch_assoc()) $encode_rows[] = $r; $res->close(); }
 
     // Fetch classrooms with enrolled count
@@ -138,6 +144,9 @@ function enc_name($r) {
                     <td class="px-6 py-4">
                         <div class="font-semibold text-slate-700"><?php echo htmlspecialchars(enc_name($row)); ?></div>
                         <div class="text-xs text-slate-400 mt-1">Verified <?php echo htmlspecialchars(date('M d, Y', strtotime($row['created_at']))); ?></div>
+                        <?php if (!empty($row['watch_issue_type'])): ?>
+                            <div class="mt-2 inline-flex items-center rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-red-700 border border-red-200">Red Flag: <?php echo htmlspecialchars($row['watch_issue_type']); ?></div>
+                        <?php endif; ?>
                     </td>
                     <td class="px-6 py-4 text-slate-600"><?php echo htmlspecialchars($row['lrn'] ?: '--'); ?></td>
                     <td class="px-6 py-4 text-slate-600"><?php echo htmlspecialchars($row['grade_level'] ?: '--'); ?></td>
@@ -189,6 +198,10 @@ function enc_name($r) {
 
                 <!-- TAB: OVERVIEW -->
                 <div id="enc-tab-overview" class="enc-tab-content p-6 space-y-4">
+                    <div id="enc-flag-alert" class="hidden rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
+                        <p class="text-sm font-bold text-red-800">Red Flag: <span id="enc-flag-type"></span></p>
+                        <p id="enc-flag-details" class="mt-1 text-xs font-medium text-red-700"></p>
+                    </div>
                     <!-- Basic Info -->
                     <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden relative">
                         <div class="absolute top-0 left-0 w-2 h-full bg-dranhs-green rounded-l-2xl"></div>
@@ -333,6 +346,21 @@ function openEncModal(student) {
     encStudent = student;
     document.getElementById('enc-modal-name').textContent = encName(student);
     document.getElementById('enc-student-id').value = student.id;
+
+    const flagAlert = document.getElementById('enc-flag-alert');
+    const flagType = document.getElementById('enc-flag-type');
+    const flagDetails = document.getElementById('enc-flag-details');
+    const watchIssueType = String(student.watch_issue_type || '').trim();
+    const watchIssueDetails = String(student.watch_issue_details || '').trim();
+    if (watchIssueType) {
+        flagType.textContent = watchIssueType;
+        flagDetails.textContent = watchIssueDetails || 'No additional notes provided in the watchlist.';
+        flagAlert.classList.remove('hidden');
+    } else {
+        flagType.textContent = '';
+        flagDetails.textContent = '';
+        flagAlert.classList.add('hidden');
+    }
 
     // Reset tabs
     document.querySelectorAll('.enc-tab-btn').forEach((b,i) => {

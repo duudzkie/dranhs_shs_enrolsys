@@ -31,6 +31,19 @@ function fetch_current_school_year($conn) {
     return $value;
 }
 
+function is_stem_qualifier_enabled($conn) {
+    $stmt = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'stem_qualifier_enabled' LIMIT 1");
+    if (!$stmt) return true;
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $enabled = true;
+    if ($result && ($row = $result->fetch_assoc())) {
+        $enabled = (($row['setting_value'] ?? '1') === '1');
+    }
+    $stmt->close();
+    return $enabled;
+}
+
 // Function to compress and resize image
 function compressImage($source, $destination, $quality = 80, $maxWidth = 800, $maxHeight = 800) {
     $info = getimagesize($source);
@@ -146,6 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $grade_level = post_value('grade_level', '');
     $current_school_year = fetch_current_school_year($conn);
+    $stem_qualifier_enabled = is_stem_qualifier_enabled($conn);
 
     // Pathway/strand normalization (Grade 12 uses strand, Grade 11 uses pathway)
     $track = post_value('track', '');
@@ -154,7 +168,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $selected_pathway_strand = strcasecmp($grade_level, 'Grade 12') === 0 ? $strand : $pathway;
     $pathway_strand = get_pathway_strand_code($grade_level, $selected_pathway_strand);
 
-    if (strcasecmp($grade_level, 'Grade 11') === 0) {
+    if ($stem_qualifier_enabled && strcasecmp($grade_level, 'Grade 11') === 0) {
         $stem_pathways = [
             'Medical & Allied Health',
             'Engineering & Aviation',

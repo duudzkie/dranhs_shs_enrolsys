@@ -5,6 +5,7 @@ function initFormLogic(themeColor) {
     let lrnCheckState = 'idle';
     let lastCheckedLrn = '';
     let currentStemQualified = false;
+    let currentStemRestrictionsEnabled = true;
     let currentG11Completer = null;
 
     const setLrnStatus = (message = '', status = 'idle') => {
@@ -84,6 +85,7 @@ function initFormLogic(themeColor) {
             });
             const data = await response.json();
 
+            currentStemRestrictionsEnabled = data.stem_qualifier_enabled !== false;
             currentStemQualified = !!data.stem_qualified;
             currentG11Completer = data.g11_completer ? data : null;
             if (typeof updateStemPathwayRestrictions === 'function') updateStemPathwayRestrictions();
@@ -101,11 +103,9 @@ function initFormLogic(themeColor) {
                 setLrnStatus(data.message || 'This LRN already exists in the database.', 'error');
             } else {
                 lrnCheckState = 'available';
-                if (data.stem_qualified && data.stem_pathway_label) {
+                if (currentStemRestrictionsEnabled && data.stem_qualified && data.stem_pathway_label) {
                     applyStemQualifierSelection(data.stem_pathway_label);
                     setLrnStatus(`STEM QUALIFIED. Career pathway set to ${data.stem_pathway_label}.`, 'success');
-                } else if (document.getElementById('g11-pathway')) {
-                    setLrnStatus('You are not in the STEM qualifiers list. You may confirm your LRN, but STEM pathways are locked unless you are qualified.', 'idle');
                 } else if (data.g11_completer && data.g11_completer_strand) {
                     if (g12StudentTypeSelect && g12StudentTypeSelect.querySelector('option[value="Old Student (Grade 11 Completer)"]')) {
                         g12StudentTypeSelect.value = 'Old Student (Grade 11 Completer)';
@@ -152,6 +152,7 @@ function initFormLogic(themeColor) {
                 lrnCheckState = 'idle';
                 lastCheckedLrn = '';
                 currentStemQualified = false;
+                currentStemRestrictionsEnabled = true;
                 currentG11Completer = null;
                 if (typeof updateStemPathwayRestrictions === 'function') updateStemPathwayRestrictions();
                 setLrnStatus('', 'idle');
@@ -162,6 +163,7 @@ function initFormLogic(themeColor) {
                 lrnCheckState = 'idle';
                 lastCheckedLrn = '';
                 currentStemQualified = false;
+                currentStemRestrictionsEnabled = true;
                 currentG11Completer = null;
                 if (typeof updateStemPathwayRestrictions === 'function') updateStemPathwayRestrictions();
                 setLrnStatus('Complete the 12-digit LRN to check if it already exists.', 'idle');
@@ -262,10 +264,10 @@ function initFormLogic(themeColor) {
         const selectedTrack = trackSelect ? trackSelect.value : '';
         Array.from(pathwaySelect.options).forEach(option => {
             const isStemPathway = STEM_PATHWAYS.includes(option.value);
-            option.disabled = selectedTrack === 'Academic' && isStemPathway && !currentStemQualified;
+            option.disabled = currentStemRestrictionsEnabled && selectedTrack === 'Academic' && isStemPathway && !currentStemQualified;
         });
 
-        if (!currentStemQualified && STEM_PATHWAYS.includes(pathwaySelect.value)) {
+        if (currentStemRestrictionsEnabled && !currentStemQualified && STEM_PATHWAYS.includes(pathwaySelect.value)) {
             pathwaySelect.value = '';
             syncG11AcademicHiddenFields();
         }
@@ -307,7 +309,7 @@ function initFormLogic(themeColor) {
 
         trackSelect.addEventListener('change', updatePathways);
         pathwaySelect.addEventListener('change', function() {
-            if (!currentStemQualified && STEM_PATHWAYS.includes(this.value)) {
+            if (currentStemRestrictionsEnabled && !currentStemQualified && STEM_PATHWAYS.includes(this.value)) {
                 this.value = '';
                 setLrnStatus('You are not in the STEM qualifiers list. STEM pathways cannot be selected unless you are qualified.', 'error');
             }
@@ -473,37 +475,61 @@ function initFormLogic(themeColor) {
             // Need a tiny delay to ensure values are updated by other listeners
             setTimeout(() => {
                 const city = citySelect ? citySelect.value : '';
+                const cityNormalized = String(city || '').trim().toLowerCase();
                 const prov = provSelect ? provSelect.value : '';
                 const brgy = brgySelect ? brgySelect.value.toLowerCase() : '';
-                
+                const isDavaoCity = cityNormalized === 'davao city' || cityNormalized === 'city of davao';
+
+                const nearBarangays = [
+                    'matina crossing',
+                    'matina aplaya',
+                    'ecoland',
+                    'bangkal',
+                    'matina pangi'
+                ];
+
+                const restrictedBarangays = [
+                    'calinan',
+                    'toril',
+                    'sasa',
+                    'panacan',
+                    'maramag',
+                    'marahan',
+                    'sibulan'
+                ];
+
+                const warningBarangays = [
+                    'talomo',
+                    'ma-a',
+                    'maa',
+                    'sandawa',
+                    'mintal',
+                    'tugbok',
+                    'buhangin',
+                    'el rio',
+                    'elrio'
+                ];
+                 
                 if (!city || !brgy || city.includes('Select')) {
                     currentMode = 'normal';
-                } else if (prov && !prov.toLowerCase().includes('davao')) {
-                    // Outside the Davao region range is blocked.
+                } else if (!isDavaoCity) {
+                    // Other cities and municipalities, including those in the Davao region, are restricted.
                     currentMode = 'restricted';
                 } else {
-                    // Within Davao region: compute more specific zoning rules.
-                    // City fields in Davao Del Norte/Sur/Oro/etc are allowed by default.
-                    const isRestrictedBrgy = [
-                        'marilog', 'paquibato', 'baguio', 'tambobong', 'tapak', 'salaysay', 'gumitan', 'suawan', 
-                        'lasang', 'bunawan', 'tibungco', 'ilang', 'mudiang', 'mahagob', 'dalag', 'dalagdag',
-                        'biao', 'mapula', 'talandang', 'sumimao', 'malabog', 'colosas', 'paradise embak',
-                        'fatima', 'wines', 'lamanan', 'inayangan', 'sibulan', 'tighungco', 'tapaco'
-                    ].some(w => brgy.includes(w));
-                    
-                    // Moderately distant areas that could cause attendance issues
-                    const isWarningBrgy = [
-                        'calinan', 'tugbok', 'toril', 'mintal', 'buhangin', 'panacan', 'sasa', 'indangan', 
-                        'cabantian', 'ma-a', 'maa', 'poblacion', 'agdao', 'downtown', 'tigatto', 'wawa', 
-                        'mandug', 'callawa', 'lampianao', 'acacia', 'daliao', 'binugao', 'sirawan', 'lizada', 
-                        'lubogan', 'bato', 'balengaeng', 'los amigos', 'tacunan', 'mulig', 'bago', 'tibuloy',
-                        'eden', 'catigan', 'bayabas', 'marapangi', 'barangay'
-                    ].some(w => brgy.includes(w));
-                    
-                    // Everything else (Talomo district, Matina, etc) defaults to normal
-                    if (isRestrictedBrgy) currentMode = 'restricted';
-                    else if (isWarningBrgy) currentMode = 'warning';
-                    else currentMode = 'normal';
+                    const isNearBrgy = nearBarangays.some(w => brgy.includes(w));
+                    const isRestrictedBrgy = restrictedBarangays.some(w => brgy.includes(w));
+                    const isWarningBrgy = warningBarangays.some(w => brgy.includes(w));
+
+                    if (isNearBrgy) {
+                        currentMode = 'normal';
+                    } else if (isRestrictedBrgy) {
+                        currentMode = 'restricted';
+                    } else if (isWarningBrgy) {
+                        currentMode = 'warning';
+                    } else {
+                        // Other Davao City barangays are treated as farther areas and require acknowledgement.
+                        currentMode = 'warning';
+                    }
                 }
 
                 // Apply UI Changes
@@ -555,7 +581,7 @@ function initFormLogic(themeColor) {
                     return;
                 }
 
-                if (pathwaySelect && trackSelect && trackSelect.value === 'Academic' && STEM_PATHWAYS.includes(pathwaySelect.value) && !currentStemQualified) {
+                if (pathwaySelect && trackSelect && currentStemRestrictionsEnabled && trackSelect.value === 'Academic' && STEM_PATHWAYS.includes(pathwaySelect.value) && !currentStemQualified) {
                     e.preventDefault();
                     setLrnStatus('You are not in the STEM qualifiers list. STEM pathways cannot be submitted unless you are qualified.', 'error');
                     pathwaySelect.focus();

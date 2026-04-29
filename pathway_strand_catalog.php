@@ -24,6 +24,56 @@ function load_pathway_strand_catalog() {
     return $catalog;
 }
 
+function load_curriculum_structure_config() {
+    static $config = null;
+
+    if ($config !== null) {
+        return $config;
+    }
+
+    $config = [];
+    if (!class_exists('mysqli')) {
+        return $config;
+    }
+
+    $conn = @new mysqli('localhost', 'root', '', 'dranhswin');
+    if ($conn->connect_error) {
+        return $config;
+    }
+
+    $res = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'curriculum_structure' LIMIT 1");
+    if ($res && ($row = $res->fetch_assoc())) {
+        $decoded = json_decode((string)($row['setting_value'] ?? ''), true);
+        if (is_array($decoded)) {
+            $config = $decoded;
+        }
+    }
+
+    $conn->close();
+    return $config;
+}
+
+function is_curriculum_option_enabled($grade_level, $track, $label) {
+    if (strcasecmp(trim((string)$grade_level), 'Grade 11') !== 0) {
+        return true;
+    }
+
+    $config = load_curriculum_structure_config();
+    $track_key = trim((string)$track);
+    if ($track_key === '' || !isset($config[$track_key]) || !is_array($config[$track_key])) {
+        return true;
+    }
+
+    foreach ($config[$track_key] as $item) {
+        if (!is_array($item) || !isset($item['name'])) continue;
+        if (strcasecmp((string)$item['name'], (string)$label) === 0) {
+            return !empty($item['enabled']);
+        }
+    }
+
+    return true;
+}
+
 function pathway_strand_grade_key($grade_level) {
     $normalized = strtolower(trim((string)$grade_level));
     if ($normalized === 'grade 11') return 'grade_11';
@@ -77,6 +127,11 @@ function get_pathway_strand_options($grade_level, $track = null) {
     $grade_key = pathway_strand_grade_key($grade_level);
     $catalog = load_pathway_strand_catalog();
     $items = isset($catalog[$grade_key]) && is_array($catalog[$grade_key]) ? $catalog[$grade_key] : [];
+
+    $items = array_values(array_filter($items, function ($item) use ($grade_level) {
+        if (!isset($item['label'])) return false;
+        return is_curriculum_option_enabled($grade_level, (string)($item['track'] ?? ''), (string)$item['label']);
+    }));
 
     if ($track === null || $track === '') {
         return $items;

@@ -59,6 +59,7 @@ $exists = $stmt->num_rows > 0;
 $stmt->close();
 
 $school_year = '';
+$stem_qualifier_enabled = true;
 $settings_stmt = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'academic_year' LIMIT 1");
 if ($settings_stmt) {
     $settings_stmt->execute();
@@ -69,12 +70,22 @@ if ($settings_stmt) {
     $settings_stmt->close();
 }
 
+$stem_toggle_stmt = $conn->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'stem_qualifier_enabled' LIMIT 1");
+if ($stem_toggle_stmt) {
+    $stem_toggle_stmt->execute();
+    $stem_toggle_result = $stem_toggle_stmt->get_result();
+    if ($stem_toggle_result && ($stem_toggle_row = $stem_toggle_result->fetch_assoc())) {
+        $stem_qualifier_enabled = (($stem_toggle_row['setting_value'] ?? '1') === '1');
+    }
+    $stem_toggle_stmt->close();
+}
+
 $stem_qualifier = null;
 $g11_completer = null;
 $watchlist_entry = null;
 
 $stem_stmt = $conn->prepare("SELECT pathway_cluster FROM stem_qualifiers WHERE lrn = ? AND school_year = ? LIMIT 1");
-if ($stem_stmt && $school_year !== '') {
+if ($stem_stmt && $school_year !== '' && $stem_qualifier_enabled) {
     $stem_stmt->bind_param("ss", $lrn, $school_year);
     $stem_stmt->execute();
     $stem_result = $stem_stmt->get_result();
@@ -120,6 +131,7 @@ echo json_encode([
     'ok' => true,
     'exists' => $exists,
     'message' => $exists ? 'This LRN already exists in the database.' : 'LRN is available.',
+    'stem_qualifier_enabled' => $stem_qualifier_enabled,
     'stem_qualified' => !empty($stem_qualifier),
     'stem_pathway_code' => $stem_pathway_code,
     'stem_pathway_label' => $stem_pathway_label,
