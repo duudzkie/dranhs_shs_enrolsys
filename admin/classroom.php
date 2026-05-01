@@ -28,6 +28,7 @@ if (!$conn->connect_error) {
     $conn->query("ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS adviser_id INT NULL AFTER section_name");
     $conn->query("ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS adviser_name VARCHAR(150) NULL AFTER adviser_id");
     $conn->query("ALTER TABLE students ADD COLUMN IF NOT EXISTS assigned_section VARCHAR(100)");
+    $conn->query("ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS group_chat_url VARCHAR(500) NULL");
 }
 
 $catalog_for_js = [
@@ -261,6 +262,18 @@ if ($conn->connect_error) {
                 $toast_message = 'Please choose a valid section for reassignment.';
                 $toast_type = 'error';
             }
+        } elseif ($_POST['cr_action'] === 'save_group_link') {
+            $cid  = (int)($_POST['classroom_id'] ?? 0);
+            $url  = trim($_POST['group_chat_url'] ?? '');
+            // Basic URL validation — allow empty to clear
+            if ($url !== '' && !filter_var($url, FILTER_VALIDATE_URL)) {
+                $toast_message = 'Invalid URL. Please enter a valid link.';
+                $toast_type = 'error';
+            } elseif ($cid > 0) {
+                $stmt = $conn->prepare("UPDATE classrooms SET group_chat_url = ? WHERE id = ?");
+                if ($stmt) { $stmt->bind_param("si", $url, $cid); $stmt->execute(); $stmt->close(); }
+                $toast_message = $url ? 'Group chat link saved.' : 'Group chat link removed.';
+            }
         } elseif ($_POST['cr_action'] === 'verify_withdraw_password') {
             $student_id = (int)($_POST['student_id'] ?? 0);
             $pwd = $_POST['admin_password'] ?? '';
@@ -368,9 +381,6 @@ function default_capacity($grade_level, $track) {
                             <span class="text-xs font-black uppercase tracking-widest" style="color:<?php echo $accentColor;?>"><?php echo htmlspecialchars($cr['grade_level']); ?></span>
                             <h4 class="font-heading font-black text-lg text-dranhs-dark leading-tight"><?php echo htmlspecialchars($cr['section_name']); ?></h4>
                         </div>
-                        <span class="shrink-0 px-2 py-1 rounded-full text-xs font-bold <?php echo $isG11?'bg-violet-100 text-violet-700':'bg-rose-100 text-rose-700';?>">
-                            <?php echo $isG11 ? 'G11' : 'G12'; ?>
-                        </span>
                     </div>
 
                     <div class="text-xs text-slate-500 font-semibold">
@@ -405,6 +415,36 @@ function default_capacity($grade_level, $track) {
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
                             Masterlist
                         </button>
+
+                        <!-- Group Chat Link -->
+                        <?php $hasLink = !empty($cr['group_chat_url']); ?>
+                        <?php if ($hasLink): ?>
+                            <!-- Has URL: clicking opens the link -->
+                            <a href="<?php echo htmlspecialchars($cr['group_chat_url']); ?>" target="_blank" rel="noopener noreferrer"
+                                class="cr-link-btn inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-colors relative"
+                                title="Open Group Chat Link"
+                                data-id="<?php echo (int)$cr['id']; ?>"
+                                data-url="<?php echo htmlspecialchars($cr['group_chat_url'], ENT_QUOTES); ?>">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+                            </a>
+                            <!-- Edit link button (long press or right-click feel — separate small edit icon) -->
+                            <button type="button"
+                                class="cr-link-edit-btn inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 hover:bg-emerald-200 transition-colors -ml-1"
+                                title="Edit Group Chat Link"
+                                data-id="<?php echo (int)$cr['id']; ?>"
+                                data-url="<?php echo htmlspecialchars($cr['group_chat_url'], ENT_QUOTES); ?>">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 11l6 6L5 23l-2-2 6-6z"/></svg>
+                            </button>
+                        <?php else: ?>
+                            <!-- No URL: clicking opens set-link modal -->
+                            <button type="button"
+                                class="cr-link-edit-btn inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-100 text-slate-400 hover:bg-slate-200 transition-colors"
+                                title="Set Group Chat Link"
+                                data-id="<?php echo (int)$cr['id']; ?>"
+                                data-url="">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+                            </button>
+                        <?php endif; ?>
                         <!-- Edit capacity -->
                         <button type="button"
                             class="cr-capacity-btn inline-flex items-center justify-center w-8 h-8 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-colors <?php echo $isAdviser ? 'hidden' : ''; ?>"
@@ -558,6 +598,37 @@ function default_capacity($grade_level, $track) {
                 <div class="flex justify-end gap-3 pt-1">
                     <button type="button" id="cr-del-cancel" class="px-5 py-2.5 rounded-xl border-2 border-slate-300 text-slate-600 font-bold text-sm hover:bg-slate-50">Cancel</button>
                     <button type="submit" class="px-5 py-2.5 rounded-xl bg-red-600 text-white font-bold text-sm hover:bg-red-700 shadow-md">Delete</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ===== GROUP CHAT LINK MODAL ===== -->
+<div id="cr-link-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-slate-900/60" id="cr-link-backdrop"></div>
+    <div class="relative z-10 min-h-screen flex items-center justify-center p-4">
+        <div class="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="bg-dranhs-dark px-6 py-5 flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-widest text-emerald-400 mb-1">Group Chat</p>
+                    <h3 class="font-heading font-black text-xl text-white">Set Group Chat Link</h3>
+                </div>
+                <button type="button" id="cr-link-close" class="w-9 h-9 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors text-xl flex items-center justify-center">&times;</button>
+            </div>
+            <form method="POST" class="p-6 space-y-4">
+                <input type="hidden" name="cr_action" value="save_group_link">
+                <input type="hidden" name="classroom_id" id="cr-link-classroom-id" value="">
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Group Chat URL</label>
+                    <input type="url" name="group_chat_url" id="cr-link-url-input"
+                        placeholder="https://chat.google.com/... or https://t.me/..."
+                        class="w-full bg-white border-2 border-slate-300 px-4 py-3 rounded-xl text-sm font-medium focus:border-dranhs-green outline-none">
+                    <p class="text-xs text-slate-400 mt-1.5">Supports any URL — Google Chat, Telegram, Messenger, etc. Leave blank to remove.</p>
+                </div>
+                <div class="flex gap-3 pt-1">
+                    <button type="button" id="cr-link-cancel" class="flex-1 px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-50">Cancel</button>
+                    <button type="submit" class="flex-1 px-4 py-2.5 rounded-xl bg-dranhs-green text-white text-sm font-bold hover:bg-emerald-700">Save Link</button>
                 </div>
             </form>
         </div>
@@ -786,7 +857,8 @@ function closeModal(modal) {
 const addModal = document.getElementById('cr-add-modal');
 const capModal = document.getElementById('cr-cap-modal');
 const delModal = document.getElementById('cr-del-modal');
-const mlModal = document.getElementById('cr-masterlist-modal');
+const mlModal  = document.getElementById('cr-masterlist-modal');
+const linkModal = document.getElementById('cr-link-modal');
 const reassignModal = document.getElementById('cr-reassign-modal');
 const withdrawModal = document.getElementById('cr-withdraw-modal');
 
@@ -1201,6 +1273,17 @@ document.querySelectorAll('.cr-masterlist-btn').forEach(btn => btn.addEventListe
 
 document.getElementById('cr-ml-close').addEventListener('click', function () { closeModal(mlModal); });
 document.getElementById('cr-ml-backdrop').addEventListener('click', function () { closeModal(mlModal); });
+
+// Group chat link modal
+document.getElementById('cr-link-close').addEventListener('click', function () { closeModal(linkModal); });
+document.getElementById('cr-link-cancel').addEventListener('click', function () { closeModal(linkModal); });
+document.getElementById('cr-link-backdrop').addEventListener('click', function () { closeModal(linkModal); });
+
+document.querySelectorAll('.cr-link-edit-btn').forEach(btn => btn.addEventListener('click', function () {
+    document.getElementById('cr-link-classroom-id').value = this.dataset.id;
+    document.getElementById('cr-link-url-input').value = this.dataset.url || '';
+    openModal(linkModal);
+}));
 document.getElementById('cr-ml-print').addEventListener('click', function () {
     const section = this.dataset.section || '';
     const classroomId = this.dataset.classroomId || '';
