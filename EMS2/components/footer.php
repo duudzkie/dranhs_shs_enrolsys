@@ -92,10 +92,10 @@
 
                     <?php
                     $steps = [
-                        ['label' => 'Submitted',  'icon' => 'M5 13l4 4L19 7'],
-                        ['label' => 'Reviewing',  'icon' => 'M5 13l4 4L19 7'],
-                        ['label' => 'Cleared',    'icon' => 'M5 13l4 4L19 7'],
-                        ['label' => 'Deployed',   'icon' => 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2'],
+                        ['label' => 'Registration', 'icon' => 'M5 13l4 4L19 7'],
+                        ['label' => 'Review',       'icon' => 'M5 13l4 4L19 7'],
+                        ['label' => 'Encode',       'icon' => 'M5 13l4 4L19 7'],
+                        ['label' => 'Enrolled',     'icon' => 'M5 13l4 4L19 7'],
                     ];
                     foreach ($steps as $i => $s):
                     ?>
@@ -275,28 +275,41 @@
         badge.textContent = d.status_label;
 
         // Step tracker
+        // Step mapping:
+        // 1 = Registration (always checked — student exists)
+        // 2 = Review (for_evaluation)
+        // 3 = Encode (for_encoding)
+        // 4 = Enrolled (enrolled)
+        const statusStepMap = {
+            'for_evaluation': 2,
+            'for_encoding':   3,
+            'enrolled':       4,
+            'withdrawn':      1,
+        };
+        const step = statusStepMap[d.status] || 1;
+
         const circles = document.querySelectorAll('.cs-step-circle');
         const labels  = document.querySelectorAll('.cs-step-label');
-        const step    = parseInt(d.step) || 0;
+
         circles.forEach((c, i) => {
-            if (i < step) {
-                c.classList.remove('border-slate-200', 'bg-white', 'text-slate-300');
+            const circleStep = i + 1; // 1-indexed
+            if (circleStep <= step) {
+                // Completed or current — green filled with checkmark
+                c.classList.remove('border-slate-200', 'bg-white', 'text-slate-300', 'border-dranhs-green');
                 c.classList.add('border-dranhs-green', 'bg-dranhs-green', 'text-white');
                 labels[i].classList.remove('text-slate-400');
                 labels[i].classList.add('text-dranhs-green');
-            } else if (i === step) {
-                c.classList.remove('border-slate-200', 'bg-white', 'text-slate-300');
-                c.classList.add('border-dranhs-green', 'bg-white', 'text-dranhs-green');
             } else {
-                c.classList.remove('border-dranhs-green', 'bg-dranhs-green', 'text-white', 'text-dranhs-green');
+                // Not yet reached — grey empty
+                c.classList.remove('border-dranhs-green', 'bg-dranhs-green', 'text-white');
                 c.classList.add('border-slate-200', 'bg-white', 'text-slate-300');
                 labels[i].classList.remove('text-dranhs-green');
                 labels[i].classList.add('text-slate-400');
             }
         });
 
-        // Progress line width
-        const pct = step === 0 ? 0 : Math.round(((step - 1) / 3) * 100);
+        // Progress line — fills between completed steps
+        const pct = step <= 1 ? 0 : Math.round(((step - 1) / 3) * 100);
         document.getElementById('cs-progress-line').style.width = pct + '%';
 
         // Group chat button
