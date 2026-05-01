@@ -50,18 +50,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         elseif ($_POST['action'] === 'assign_room') {
             $section_id = intval($_POST['section_id']);
             $room = $_POST['room'];
-            
-            // Clear prior assignments to this room
-            $clear = $conn->prepare("UPDATE add_sections SET room = NULL WHERE room = ?");
-            $clear->bind_param("s", $room);
+
+            // Get the grade level of the section being assigned
+            $gl_stmt = $conn->prepare("SELECT grade_level FROM add_sections WHERE id = ?");
+            $gl_stmt->bind_param("i", $section_id);
+            $gl_stmt->execute();
+            $gl_row = $gl_stmt->get_result()->fetch_assoc();
+            $gl_stmt->close();
+            $grade_level = $gl_row['grade_level'] ?? '';
+
+            // Clear prior assignment of THIS grade level in this room (allow 1 per grade)
+            $clear = $conn->prepare("UPDATE add_sections SET room = NULL WHERE room = ? AND grade_level = ? AND id != ?");
+            $clear->bind_param("ssi", $room, $grade_level, $section_id);
             $clear->execute();
-            
+            $clear->close();
+
             // Assign room to section
             $stmt = $conn->prepare("UPDATE add_sections SET room = ? WHERE id = ?");
             $stmt->bind_param("si", $room, $section_id);
             $stmt->execute();
             $stmt->close();
-            
+
             $toast_message = 'Room successfully assigned!';
             $toast_type = 'success';
         }
