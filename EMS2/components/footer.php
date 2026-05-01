@@ -243,6 +243,12 @@
             <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-slate-100 border border-slate-200 inline-block"></span> Vacant</span>
         </div>
 
+        <!-- Annex entries (populated by JS) -->
+        <div id="rl-annex-section" class="hidden px-6 pb-4"></div>
+
+        <!-- Facilities (populated by JS) -->
+        <div id="rl-facilities-section" class="hidden px-6 pb-4"></div>
+
         <div class="px-6 pb-5 flex justify-end">
             <button id="rl-close-bottom" class="text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-700 transition-colors">Close</button>
         </div>
@@ -473,6 +479,45 @@
                 loaded = true;
                 renderBuilding('14', BLDG_14, 'rl-floors-14', 4);
                 renderBuilding('15', BLDG_15, 'rl-floors-15', 5);
+
+                // Annex entries
+                const annexWrap = document.getElementById('rl-annex-section');
+                if (data.annex && data.annex.length > 0) {
+                    annexWrap.innerHTML = `
+                        <div class="text-[9px] font-black uppercase tracking-widest text-indigo-500 mb-2 flex items-center gap-1.5">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"/></svg>
+                            Manual Annex Entries
+                        </div>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            ${data.annex.map(a => `
+                                <div class="bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2">
+                                    <div class="text-xs font-black text-indigo-800">${a.section_name}</div>
+                                    <div class="text-[9px] font-bold text-indigo-400 mt-0.5">Bldg ${a.building_number} · Floor ${a.floor_number} · Room ${a.room_number}</div>
+                                </div>
+                            `).join('')}
+                        </div>`;
+                    annexWrap.classList.remove('hidden');
+                }
+
+                // Facilities
+                const facWrap = document.getElementById('rl-facilities-section');
+                if (data.facilities && data.facilities.length > 0) {
+                    facWrap.innerHTML = `
+                        <div class="text-[9px] font-black uppercase tracking-widest text-amber-500 mb-2 flex items-center gap-1.5">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                            Faculty / Laboratories
+                        </div>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                            ${data.facilities.map(f => `
+                                <div class="bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                                    <div class="text-xs font-black text-amber-800">${f.facility_name}</div>
+                                    <div class="text-[9px] font-bold text-amber-400 mt-0.5">Bldg ${f.building_number} · Floor ${f.floor_number} · Room ${f.room_number}</div>
+                                </div>
+                            `).join('')}
+                        </div>`;
+                    facWrap.classList.remove('hidden');
+                }
+
                 rlLoading.classList.add('hidden');
                 rlContent.classList.remove('hidden');
             })

@@ -20,6 +20,24 @@ $conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
 $toast_message = '';
 $toast_type = '';
 
+// Ensure annex/facilities tables exist
+$conn->query("CREATE TABLE IF NOT EXISTS room_annex (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    section_name VARCHAR(100) NOT NULL,
+    building_number VARCHAR(50) NOT NULL,
+    floor_number VARCHAR(20) NOT NULL,
+    room_number VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)");
+$conn->query("CREATE TABLE IF NOT EXISTS room_facilities (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    facility_name VARCHAR(150) NOT NULL,
+    building_number VARCHAR(50) NOT NULL,
+    floor_number VARCHAR(20) NOT NULL,
+    room_number VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)");
+
 // Handle POST Requests
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action'])) {
@@ -193,8 +211,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $toast_type    = 'error';
             }
         }
+        elseif ($_POST['action'] === 'add_annex') {
+            $sec  = trim($_POST['annex_section']  ?? '');
+            $bldg = trim($_POST['annex_building']  ?? '');
+            $flr  = trim($_POST['annex_floor']     ?? '');
+            $rm   = trim($_POST['annex_room']      ?? '');
+            if ($sec && $bldg && $flr && $rm) {
+                $stmt = $conn->prepare("INSERT INTO room_annex (section_name, building_number, floor_number, room_number) VALUES (?,?,?,?)");
+                if ($stmt) { $stmt->bind_param("ssss", $sec, $bldg, $flr, $rm); $stmt->execute(); $stmt->close(); }
+                $toast_message = 'Annex entry added.';
+                $toast_type = 'success';
+            } else {
+                $toast_message = 'Please fill in all fields.';
+                $toast_type = 'error';
+            }
+        }
+        elseif ($_POST['action'] === 'delete_annex') {
+            $id = intval($_POST['annex_id'] ?? 0);
+            $stmt = $conn->prepare("DELETE FROM room_annex WHERE id = ?");
+            if ($stmt) { $stmt->bind_param("i", $id); $stmt->execute(); $stmt->close(); }
+            $toast_message = 'Annex entry removed.';
+            $toast_type = 'success';
+        }
+        elseif ($_POST['action'] === 'add_facility') {
+            $name = trim($_POST['facility_name']     ?? '');
+            $bldg = trim($_POST['facility_building'] ?? '');
+            $flr  = trim($_POST['facility_floor']    ?? '');
+            $rm   = trim($_POST['facility_room']     ?? '');
+            if ($name && $bldg && $flr && $rm) {
+                $stmt = $conn->prepare("INSERT INTO room_facilities (facility_name, building_number, floor_number, room_number) VALUES (?,?,?,?)");
+                if ($stmt) { $stmt->bind_param("ssss", $name, $bldg, $flr, $rm); $stmt->execute(); $stmt->close(); }
+                $toast_message = 'Facility added.';
+                $toast_type = 'success';
+            } else {
+                $toast_message = 'Please fill in all fields.';
+                $toast_type = 'error';
+            }
+        }
+        elseif ($_POST['action'] === 'delete_facility') {
+            $id = intval($_POST['facility_id'] ?? 0);
+            $stmt = $conn->prepare("DELETE FROM room_facilities WHERE id = ?");
+            if ($stmt) { $stmt->bind_param("i", $id); $stmt->execute(); $stmt->close(); }
+            $toast_message = 'Facility removed.';
+            $toast_type = 'success';
+        }
         elseif ($_POST['action'] === 'retrieve_student') {
-            $sid = intval($_POST['student_id'] ?? 0);
             if ($sid > 0) {
                 $stmt = $conn->prepare("UPDATE students SET enrollment_status = 'for_evaluation' WHERE id = ? AND enrollment_status = 'withdrawn'");
                 $stmt->bind_param("i", $sid);
@@ -269,6 +330,15 @@ if ($res) {
         $settings[$row['setting_key']] = $row['setting_value'];
     }
 }
+
+// Fetch annex entries and facilities
+$annex_entries = [];
+$ar = $conn->query("SELECT * FROM room_annex ORDER BY building_number, floor_number, room_number");
+if ($ar) { while ($r = $ar->fetch_assoc()) $annex_entries[] = $r; $ar->close(); }
+
+$facilities = [];
+$fr = $conn->query("SELECT * FROM room_facilities ORDER BY building_number, floor_number, room_number");
+if ($fr) { while ($r = $fr->fetch_assoc()) $facilities[] = $r; $fr->close(); }
 
 // Fetch withdrawn students
 $withdrawn_students = [];
@@ -501,11 +571,17 @@ function getRoomAssignment($roomNumber, $registries) {
                         Link Sections to Physical Locations within Bldg 14 and 15
                     </p>
                 </div>
-                <!-- Manual entry is dummy for now as per design -->
-                <button class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-6 py-3 rounded-xl uppercase tracking-widest shadow-lg shadow-indigo-600/30 transition-transform hover:-translate-y-0.5 flex items-center gap-2">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
-                    Manual Annex Entry
-                </button>
+                <!-- Manual Annex Entry + Faculty/Lab buttons -->
+                <div class="flex gap-2">
+                    <button type="button" id="open-annex-modal" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-5 py-3 rounded-xl uppercase tracking-widest shadow-lg shadow-indigo-600/30 transition-transform hover:-translate-y-0.5 flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg>
+                        Manual Annex Entry
+                    </button>
+                    <button type="button" id="open-facility-modal" class="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-5 py-3 rounded-xl uppercase tracking-widest shadow-lg shadow-amber-500/30 transition-transform hover:-translate-y-0.5 flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                        Faculty / Laboratory
+                    </button>
+                </div>
             </div>
 
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-8">
@@ -562,6 +638,64 @@ function getRoomAssignment($roomNumber, $registries) {
             </div>
 
         </div> <!-- END TAB ROOM ASSIGNMENT -->
+
+        <!-- Annex Entries List -->
+        <?php if (!empty($annex_entries)): ?>
+        <div class="mt-8">
+            <h3 class="text-xs font-black uppercase tracking-widest text-indigo-600 mb-3 flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"/></svg>
+                Manual Annex Entries
+            </h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <?php foreach ($annex_entries as $ae): ?>
+                <div class="flex items-center justify-between bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3">
+                    <div>
+                        <div class="text-sm font-black text-indigo-800"><?php echo htmlspecialchars($ae['section_name']); ?></div>
+                        <div class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mt-0.5">
+                            Bldg <?php echo htmlspecialchars($ae['building_number']); ?> · Floor <?php echo htmlspecialchars($ae['floor_number']); ?> · Room <?php echo htmlspecialchars($ae['room_number']); ?>
+                        </div>
+                    </div>
+                    <form method="POST" action="?page=system_settings" onsubmit="return confirm('Remove this entry?')">
+                        <input type="hidden" name="action" value="delete_annex">
+                        <input type="hidden" name="annex_id" value="<?php echo (int)$ae['id']; ?>">
+                        <button type="submit" class="text-indigo-300 hover:text-red-500 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3m-7 0h8"/></svg>
+                        </button>
+                    </form>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <!-- Facilities List -->
+        <?php if (!empty($facilities)): ?>
+        <div class="mt-6">
+            <h3 class="text-xs font-black uppercase tracking-widest text-amber-600 mb-3 flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                Faculty / Laboratories
+            </h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <?php foreach ($facilities as $fc): ?>
+                <div class="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+                    <div>
+                        <div class="text-sm font-black text-amber-800"><?php echo htmlspecialchars($fc['facility_name']); ?></div>
+                        <div class="text-[10px] font-bold text-amber-500 uppercase tracking-widest mt-0.5">
+                            Bldg <?php echo htmlspecialchars($fc['building_number']); ?> · Floor <?php echo htmlspecialchars($fc['floor_number']); ?> · Room <?php echo htmlspecialchars($fc['room_number']); ?>
+                        </div>
+                    </div>
+                    <form method="POST" action="?page=system_settings" onsubmit="return confirm('Remove this facility?')">
+                        <input type="hidden" name="action" value="delete_facility">
+                        <input type="hidden" name="facility_id" value="<?php echo (int)$fc['id']; ?>">
+                        <button type="submit" class="text-amber-300 hover:text-red-500 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3m-7 0h8"/></svg>
+                        </button>
+                    </form>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
 
         <!-- CURRICULUM TAB -->
         <div id="tab-curriculum" class="tab-content hidden">
@@ -848,6 +982,91 @@ function getRoomAssignment($roomNumber, $registries) {
 <!-- ===================================== -->
 <!-- MAP BUILDING MODAL -->
 <!-- ===================================== -->
+<!-- ANNEX ENTRY MODAL -->
+<div id="annex-modal" class="fixed inset-0 z-[110] hidden items-center justify-center p-4" style="background:rgba(15,23,42,0.6);">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div class="bg-indigo-600 px-6 py-5 flex items-center justify-between">
+            <div>
+                <p class="text-xs font-bold uppercase tracking-widest text-indigo-200 mb-0.5">Room Assignment</p>
+                <h3 class="font-heading font-black text-xl text-white">Manual Annex Entry</h3>
+            </div>
+            <button type="button" id="annex-modal-close" class="w-9 h-9 rounded-full bg-white/10 text-white hover:bg-white/20 text-xl flex items-center justify-center">&times;</button>
+        </div>
+        <form method="POST" action="?page=system_settings" class="p-6 space-y-4">
+            <input type="hidden" name="action" value="add_annex">
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Section Name</label>
+                <input type="text" name="annex_section" required placeholder="e.g. ANDROMEDA"
+                    class="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:border-indigo-500 outline-none">
+            </div>
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Building No.</label>
+                    <input type="text" name="annex_building" required placeholder="e.g. 16"
+                        class="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-sm font-semibold focus:border-indigo-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Floor</label>
+                    <input type="text" name="annex_floor" required placeholder="e.g. 2"
+                        class="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-sm font-semibold focus:border-indigo-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Room No.</label>
+                    <input type="text" name="annex_room" required placeholder="e.g. 201"
+                        class="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-sm font-semibold focus:border-indigo-500 outline-none">
+                </div>
+            </div>
+            <div class="flex gap-3 pt-1">
+                <button type="button" id="annex-modal-cancel" class="flex-1 px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-50">Cancel</button>
+                <button type="submit" class="flex-1 px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold hover:bg-indigo-700">Save Entry</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- FACILITY MODAL -->
+<div id="facility-modal" class="fixed inset-0 z-[110] hidden items-center justify-center p-4" style="background:rgba(15,23,42,0.6);">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div class="bg-amber-500 px-6 py-5 flex items-center justify-between">
+            <div>
+                <p class="text-xs font-bold uppercase tracking-widest text-amber-100 mb-0.5">Room Assignment</p>
+                <h3 class="font-heading font-black text-xl text-white">Faculty / Laboratory</h3>
+            </div>
+            <button type="button" id="facility-modal-close" class="w-9 h-9 rounded-full bg-white/10 text-white hover:bg-white/20 text-xl flex items-center justify-center">&times;</button>
+        </div>
+        <form method="POST" action="?page=system_settings" class="p-6 space-y-4">
+            <input type="hidden" name="action" value="add_facility">
+            <div>
+                <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Facility Name</label>
+                <input type="text" name="facility_name" required placeholder="e.g. SHS Faculty, Cookery Laboratory, ICT Lab"
+                    class="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:border-amber-500 outline-none">
+            </div>
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Building No.</label>
+                    <input type="text" name="facility_building" required placeholder="e.g. 14"
+                        class="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-sm font-semibold focus:border-amber-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Floor</label>
+                    <input type="text" name="facility_floor" required placeholder="e.g. 1"
+                        class="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-sm font-semibold focus:border-amber-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Room No.</label>
+                    <input type="text" name="facility_room" required placeholder="e.g. 101"
+                        class="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-sm font-semibold focus:border-amber-500 outline-none">
+                </div>
+            </div>
+            <div class="flex gap-3 pt-1">
+                <button type="button" id="facility-modal-cancel" class="flex-1 px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-50">Cancel</button>
+                <button type="submit" class="flex-1 px-4 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600">Save Facility</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- MAP BUILDING MODAL -->
 <div id="map-modal" class="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm hidden flex items-center justify-center p-4 lg:p-10 opacity-0 transition-opacity duration-300">
     <!-- Close wrapper -->
     <div class="absolute inset-0 cursor-pointer" onclick="closeMapModal()"></div>
@@ -1220,6 +1439,36 @@ function getRoomAssignment($roomNumber, $registries) {
         if (savedTab) {
             switchTab(savedTab);
         }
+
+        // Annex modal
+        const annexModal   = document.getElementById('annex-modal');
+        const facilityModal = document.getElementById('facility-modal');
+
+        document.getElementById('open-annex-modal').addEventListener('click', () => {
+            annexModal.classList.remove('hidden');
+            annexModal.classList.add('flex');
+        });
+        document.getElementById('annex-modal-close').addEventListener('click', () => {
+            annexModal.classList.add('hidden');
+            annexModal.classList.remove('flex');
+        });
+        document.getElementById('annex-modal-cancel').addEventListener('click', () => {
+            annexModal.classList.add('hidden');
+            annexModal.classList.remove('flex');
+        });
+
+        document.getElementById('open-facility-modal').addEventListener('click', () => {
+            facilityModal.classList.remove('hidden');
+            facilityModal.classList.add('flex');
+        });
+        document.getElementById('facility-modal-close').addEventListener('click', () => {
+            facilityModal.classList.add('hidden');
+            facilityModal.classList.remove('flex');
+        });
+        document.getElementById('facility-modal-cancel').addEventListener('click', () => {
+            facilityModal.classList.add('hidden');
+            facilityModal.classList.remove('flex');
+        });
 
         // Template file input — show filename + enable submit
         const tplInput = document.getElementById('template-file-input');
