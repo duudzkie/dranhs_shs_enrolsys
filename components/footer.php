@@ -117,11 +117,11 @@
                 <div class="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                     <div class="flex items-center gap-2 mb-3">
                         <svg class="w-4 h-4 text-violet-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l9-5-9-5-9 5 9 5z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/></svg>
-                        <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Academic Node</span>
+                        <span class="text-[9px] font-black uppercase tracking-widest text-slate-400">Enrollment Profile</span>
                     </div>
                     <div class="space-y-2">
                         <div>
-                            <div class="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Pathway</div>
+                            <div id="cs-pathway-label" class="text-[8px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Career Pathway</div>
                             <div id="cs-pathway" class="text-xs font-black text-dranhs-dark leading-tight"></div>
                         </div>
                         <div class="flex gap-4">
@@ -257,6 +257,9 @@
         document.getElementById('cs-name').textContent = d.full_name;
         document.getElementById('cs-lrn-badge').textContent = d.lrn;
         document.getElementById('cs-sy-badge').textContent = 'S.Y. ' + d.school_year;
+        // Career Pathway for G11, Strand for G12
+        const pathwayLabel = d.grade_level === 'Grade 11' ? 'Career Pathway' : 'Strand';
+        document.getElementById('cs-pathway-label').textContent = pathwayLabel;
         document.getElementById('cs-pathway').textContent = d.pathway || d.track || '--';
         document.getElementById('cs-grade').textContent = d.grade_num || '--';
         document.getElementById('cs-section').textContent = d.section || '--';
