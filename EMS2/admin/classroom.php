@@ -28,7 +28,11 @@ if (!$conn->connect_error) {
     $conn->query("ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS adviser_id INT NULL AFTER section_name");
     $conn->query("ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS adviser_name VARCHAR(150) NULL AFTER adviser_id");
     $conn->query("ALTER TABLE students ADD COLUMN IF NOT EXISTS assigned_section VARCHAR(100)");
-    $conn->query("ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS group_chat_url VARCHAR(500) NULL");
+    // Add group_chat_url safely — check first to support MySQL 5.7
+    $col_check = $conn->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='dranhswin' AND TABLE_NAME='classrooms' AND COLUMN_NAME='group_chat_url'");
+    if ($col_check && $col_check->num_rows === 0) {
+        $conn->query("ALTER TABLE classrooms ADD COLUMN group_chat_url VARCHAR(500) NULL");
+    }
 }
 
 $catalog_for_js = [
