@@ -331,8 +331,10 @@ if ($res) {
     }
 }
 
-// Fetch annex entries and facilities
-$annex_entries = [];
+// Fetch sections without a room assignment (available for annex entry)
+$annex_available_sections = [];
+$avs = $conn->query("SELECT id, name, grade_level FROM add_sections ORDER BY grade_level ASC, name ASC");
+if ($avs) { while ($r = $avs->fetch_assoc()) $annex_available_sections[] = $r; $avs->close(); }
 $ar = $conn->query("SELECT * FROM room_annex ORDER BY building_number, floor_number, room_number");
 if ($ar) { while ($r = $ar->fetch_assoc()) $annex_entries[] = $r; $ar->close(); }
 
@@ -996,8 +998,23 @@ function getRoomAssignment($roomNumber, $registries) {
             <input type="hidden" name="action" value="add_annex">
             <div>
                 <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Section Name</label>
-                <input type="text" name="annex_section" required placeholder="e.g. ANDROMEDA"
-                    class="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:border-indigo-500 outline-none">
+                <select name="annex_section" required
+                    class="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:border-indigo-500 outline-none bg-white">
+                    <option value="">Select a section...</option>
+                    <?php
+                    $last_grade = '';
+                    foreach ($annex_available_sections as $s):
+                        $grade_label = 'Grade ' . $s['grade_level'];
+                        if ($grade_label !== $last_grade):
+                            if ($last_grade !== '') echo '</optgroup>';
+                            echo '<optgroup label="' . htmlspecialchars($grade_label) . '">';
+                            $last_grade = $grade_label;
+                        endif;
+                    ?>
+                    <option value="<?php echo htmlspecialchars($s['name']); ?>"><?php echo htmlspecialchars($s['name']); ?></option>
+                    <?php endforeach; ?>
+                    <?php if ($last_grade !== '') echo '</optgroup>'; ?>
+                </select>
             </div>
             <div class="grid grid-cols-3 gap-3">
                 <div>
