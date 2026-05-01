@@ -2,7 +2,6 @@
 /**
  * room_locator.php — Public room locator API
  * Returns JSON of all room assignments for the visual map
- * Usage: room_locator.php
  */
 
 header('Content-Type: application/json');
@@ -14,15 +13,22 @@ if ($conn->connect_error) {
     exit;
 }
 
-// Fetch all sections with room assignments
-// Each room can have up to 2 sections (1 per grade level)
+// add_sections.grade_level stores '11'/'12'
+// classrooms.grade_level stores 'Grade 11'/'Grade 12'
+// Join on section name only — don't rely on grade_level matching
 $res = $conn->query("
-    SELECT s.id, s.name AS section_name, s.grade_level, s.room,
-           c.adviser_name, c.track, c.pathway_strand
+    SELECT
+        s.id,
+        s.name AS section_name,
+        s.grade_level,
+        s.room,
+        c.adviser_name,
+        c.track,
+        c.pathway_strand
     FROM add_sections s
-    LEFT JOIN classrooms c ON c.section_name = s.name
+    LEFT JOIN classrooms c ON LOWER(TRIM(c.section_name COLLATE utf8mb4_general_ci)) = LOWER(TRIM(s.name COLLATE utf8mb4_general_ci))
     WHERE s.room IS NOT NULL AND s.room != ''
-    ORDER BY s.room ASC, s.grade_level ASC
+    ORDER BY CAST(s.room AS UNSIGNED) ASC, s.grade_level ASC
 ");
 
 $rooms = [];
@@ -32,7 +38,7 @@ if ($res) {
         if (!isset($rooms[$r])) $rooms[$r] = [];
         $rooms[$r][] = [
             'section'   => $row['section_name'],
-            'grade'     => $row['grade_level'],
+            'grade'     => $row['grade_level'], // '11' or '12'
             'adviser'   => $row['adviser_name'] ?? '',
             'track'     => $row['track'] ?? '',
             'pathway'   => $row['pathway_strand'] ?? '',
