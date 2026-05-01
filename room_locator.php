@@ -46,5 +46,15 @@ if ($res) {
     }
 }
 
+// Fetch annex entries (sections outside Bldg 14/15)
+$annex = [];
+$ar = $conn->query("SELECT * FROM room_annex ORDER BY building_number, floor_number, room_number");
+if ($ar) { while ($r = $ar->fetch_assoc()) $annex[] = $r; $ar->close(); }
+
+// Fetch facilities
+$facilities = [];
+$fr = $conn->query("SELECT * FROM room_facilities ORDER BY building_number, floor_number, room_number");
+if ($fr) { while ($r = $fr->fetch_assoc()) $facilities[] = $r; $fr->close(); }
+
 $conn->close();
-echo json_encode(['rooms' => $rooms]);
+echo json_encode(['rooms' => $rooms, 'annex' => $annex, 'facilities' => $facilities]);
