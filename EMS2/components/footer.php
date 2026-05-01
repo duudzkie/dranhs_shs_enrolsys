@@ -94,7 +94,6 @@
                     $steps = [
                         ['label' => 'Registration', 'icon' => 'M5 13l4 4L19 7'],
                         ['label' => 'Review',       'icon' => 'M5 13l4 4L19 7'],
-                        ['label' => 'Encode',       'icon' => 'M5 13l4 4L19 7'],
                         ['label' => 'Enrolled',     'icon' => 'M5 13l4 4L19 7'],
                     ];
                     foreach ($steps as $i => $s):
@@ -274,16 +273,14 @@
         badge.className = 'px-3 py-1 rounded-full text-xs font-black uppercase tracking-wide ' + (statusColors[d.status] || 'bg-slate-100 text-slate-600');
         badge.textContent = d.status_label;
 
-        // Step tracker
-        // Step mapping:
-        // 1 = Registration (always checked — student exists)
-        // 2 = Review (for_evaluation)
-        // 3 = Encode (for_encoding)
-        // 4 = Enrolled (enrolled)
+        // Step mapping (3 steps):
+        // 1 = Registration (for_evaluation — just submitted)
+        // 2 = Review       (for_encoding — passed evaluation)
+        // 3 = Enrolled     (enrolled — fully enrolled)
         const statusStepMap = {
-            'for_evaluation': 2,
-            'for_encoding':   3,
-            'enrolled':       4,
+            'for_evaluation': 1,
+            'for_encoding':   2,
+            'enrolled':       3,
             'withdrawn':      1,
         };
         const step = statusStepMap[d.status] || 1;
@@ -292,15 +289,13 @@
         const labels  = document.querySelectorAll('.cs-step-label');
 
         circles.forEach((c, i) => {
-            const circleStep = i + 1; // 1-indexed
+            const circleStep = i + 1;
             if (circleStep <= step) {
-                // Completed or current — green filled with checkmark
                 c.classList.remove('border-slate-200', 'bg-white', 'text-slate-300', 'border-dranhs-green');
                 c.classList.add('border-dranhs-green', 'bg-dranhs-green', 'text-white');
                 labels[i].classList.remove('text-slate-400');
                 labels[i].classList.add('text-dranhs-green');
             } else {
-                // Not yet reached — grey empty
                 c.classList.remove('border-dranhs-green', 'bg-dranhs-green', 'text-white');
                 c.classList.add('border-slate-200', 'bg-white', 'text-slate-300');
                 labels[i].classList.remove('text-dranhs-green');
@@ -308,8 +303,8 @@
             }
         });
 
-        // Progress line — fills between completed steps
-        const pct = step <= 1 ? 0 : Math.round(((step - 1) / 3) * 100);
+        // Progress line — 0%, 50%, 100%
+        const pct = step <= 1 ? 0 : Math.round(((step - 1) / 2) * 100);
         document.getElementById('cs-progress-line').style.width = pct + '%';
 
         // Group chat button
