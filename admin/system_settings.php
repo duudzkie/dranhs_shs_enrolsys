@@ -20,9 +20,12 @@ $conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
 $toast_message = '';
 $toast_type = '';
 
+// Ensure theme uploads directory exists
+$theme_dir = __DIR__ . '/../uploads/theme/';
+if (!is_dir($theme_dir)) mkdir($theme_dir, 0755, true);
+
 // Ensure annex/facilities tables exist
-$conn->query("CREATE TABLE IF NOT EXISTS room_annex (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+$conn->query("CREATE TABLE IF NOT EXISTS room_annex (    id INT AUTO_INCREMENT PRIMARY KEY,
     section_name VARCHAR(100) NOT NULL,
     building_number VARCHAR(50) NOT NULL,
     floor_number VARCHAR(20) NOT NULL,
@@ -272,6 +275,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $toast_message = 'Facility removed.';
             $toast_type = 'success';
         }
+        elseif ($_POST['action'] === 'upload_theme_asset') {
+            $asset_key = trim($_POST['asset_key'] ?? '');
+            $allowed_keys = ['school_logo', 'background', 'deped_logo', 'division_logo'];
+            $upload_dir = __DIR__ . '/../uploads/theme/';
+
+            if (!in_array($asset_key, $allowed_keys)) {
+                $toast_message = 'Invalid asset type.';
+                $toast_type = 'error';
+            } elseif (!isset($_FILES['theme_file']) || $_FILES['theme_file']['error'] !== UPLOAD_ERR_OK) {
+                $toast_message = 'No file received or upload error.';
+                $toast_type = 'error';
+            } else {
+                $file = $_FILES['theme_file'];
+                $mime = mime_content_type($file['tmp_name']);
+                $allowed_mimes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/svg+xml'];
+                if (!in_array($mime, $allowed_mimes)) {
+                    $toast_message = 'Only PNG, JPG, WebP, or SVG files are allowed.';
+                    $toast_type = 'error';
+                } elseif ($file['size'] > 2 * 1024 * 1024) {
+                    $toast_message = 'File must be under 2MB.';
+                    $toast_type = 'error';
+                } else {
+                    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+                    $dest = $upload_dir . $asset_key . '.' . $ext;
+                    // Remove old files for this key
+                    foreach (glob($upload_dir . $asset_key . '.*') as $old) @unlink($old);
+                    if (move_uploaded_file($file['tmp_name'], $dest)) {
+                        // Save path to system_settings
+                        $rel = 'uploads/theme/' . $asset_key . '.' . $ext;
+                        $chk = $conn->prepare("SELECT setting_key FROM system_settings WHERE setting_key = ?");
+                        $chk->bind_param("s", $asset_key); $chk->execute();
+                        $exists = $chk->get_result()->num_rows > 0; $chk->close();
+                        if ($exists) {
+                            $upd = $conn->prepare("UPDATE system_settings SET setting_value = ? WHERE setting_key = ?");
+                            $upd->bind_param("ss", $rel, $asset_key); $upd->execute(); $upd->close();
+                        } else {
+                            $ins = $conn->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES (?, ?)");
+                            $ins->bind_param("ss", $asset_key, $rel); $ins->execute(); $ins->close();
+                        }
+                        $toast_message = ucwords(str_replace('_', ' ', $asset_key)) . ' uploaded successfully.';
+                        $toast_type = 'success';
+                    } else {
+                        $toast_message = 'Upload failed. Check folder permissions.';
+                        $toast_type = 'error';
+                    }
+                }
+            }
+        }
+        elseif ($_POST['action'] === 'remove_theme_asset') {
+            $asset_key = trim($_POST['asset_key'] ?? '');
+            $allowed_keys = ['school_logo', 'background', 'deped_logo', 'division_logo'];
+            if (in_array($asset_key, $allowed_keys)) {
+                $upload_dir = __DIR__ . '/../uploads/theme/';
+                foreach (glob($upload_dir . $asset_key . '.*') as $old) @unlink($old);
+                $del = $conn->prepare("DELETE FROM system_settings WHERE setting_key = ?");
+                $del->bind_param("s", $asset_key); $del->execute(); $del->close();
+                $toast_message = ucwords(str_replace('_', ' ', $asset_key)) . ' removed.';
+                $toast_type = 'success';
+            }
+        }
         elseif ($_POST['action'] === 'retrieve_student') {
             if ($sid > 0) {
                 $stmt = $conn->prepare("UPDATE students SET enrollment_status = 'for_evaluation' WHERE id = ? AND enrollment_status = 'withdrawn'");
@@ -437,7 +500,10 @@ function getRoomAssignment($roomNumber, $registries) {
         <button onclick="switchTab('withdrawn')" id="tab-btn-withdrawn" class="tab-btn px-6 py-4 font-bold text-sm text-slate-500 hover:text-red-600 hover:bg-slate-50 transition-colors shrink-0 flex items-center gap-2">
             Withdrawn Students
         </button>
-        <button class="px-6 py-4 font-bold text-sm text-slate-400 cursor-not-allowed shrink-0 flex items-center gap-2">Theme <span class="bg-slate-200 text-slate-500 text-[10px] px-1.5 py-0.5 rounded-md uppercase tracking-wide">Soon</span></button>
+        <button onclick="switchTab('theme')" id="tab-btn-theme" class="tab-btn px-6 py-4 font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors shrink-0 flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
+            Theme
+        </button>
         <button onclick="switchTab('curriculum')" id="tab-btn-curriculum" class="tab-btn px-6 py-4 font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors shrink-0 flex items-center gap-2">Curriculum</button>
         <button onclick="switchTab('datahub')" id="tab-btn-datahub" class="tab-btn px-6 py-4 font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors shrink-0 flex items-center gap-2">Data Hub</button>
         <button onclick="switchTab('print-templates')" id="tab-btn-print-templates" class="tab-btn px-6 py-4 font-bold text-sm text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors shrink-0 flex items-center gap-2">
@@ -709,71 +775,117 @@ function getRoomAssignment($roomNumber, $registries) {
 
             </div>
 
+            <?php
+            // Annex entries — only non-Bldg14/15
+            $other_annex = array_filter($annex_entries, function($ae) {
+                $b = trim($ae['building_number'] ?? '');
+                return $b !== '14' && $b !== '15';
+            });
+            ?>
+            <?php if (!empty($other_annex)): ?>
+            <div class="mt-8">
+                <h3 class="text-xs font-black uppercase tracking-widest text-indigo-600 mb-3 flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"/></svg>
+                    Manual Annex Entries (Other Buildings)
+                </h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <?php foreach ($other_annex as $ae): ?>
+                    <div class="flex items-center justify-between bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3">
+                        <div>
+                            <div class="text-sm font-black text-indigo-800"><?php echo htmlspecialchars($ae['section_name']); ?></div>
+                            <div class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mt-0.5">
+                                Bldg <?php echo htmlspecialchars($ae['building_number']); ?> · Floor <?php echo htmlspecialchars($ae['floor_number']); ?> · Room <?php echo htmlspecialchars($ae['room_number']); ?>
+                            </div>
+                        </div>
+                        <form method="POST" action="?page=system_settings" onsubmit="return confirm('Remove?')">
+                            <input type="hidden" name="action" value="delete_annex">
+                            <input type="hidden" name="annex_id" value="<?php echo (int)$ae['id']; ?>">
+                            <button type="submit" class="text-indigo-300 hover:text-red-500 transition-colors">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3m-7 0h8"/></svg>
+                            </button>
+                        </form>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
+
         </div> <!-- END TAB ROOM ASSIGNMENT -->
 
-        <!-- Annex Entries List — only show entries NOT in Bldg 14 or 15 -->
-        <?php
-        $other_annex = array_filter($annex_entries, function($ae) {
-            $b = trim($ae['building_number'] ?? '');
-            return $b !== '14' && $b !== '15';
-        });
-        ?>
-        <?php if (!empty($other_annex)): ?>
-        <div class="mt-8">
-            <h3 class="text-xs font-black uppercase tracking-widest text-indigo-600 mb-3 flex items-center gap-2">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"/></svg>
-                Manual Annex Entries (Other Buildings)
-            </h3>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                <?php foreach ($other_annex as $ae): ?>
-                <div class="flex items-center justify-between bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3">
-                    <div>
-                        <div class="text-sm font-black text-indigo-800"><?php echo htmlspecialchars($ae['section_name']); ?></div>
-                        <div class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mt-0.5">
-                            Bldg <?php echo htmlspecialchars($ae['building_number']); ?> · Floor <?php echo htmlspecialchars($ae['floor_number']); ?> · Room <?php echo htmlspecialchars($ae['room_number']); ?>
-                        </div>
-                    </div>
-                    <form method="POST" action="?page=system_settings" onsubmit="return confirm('Remove this entry?')">
-                        <input type="hidden" name="action" value="delete_annex">
-                        <input type="hidden" name="annex_id" value="<?php echo (int)$ae['id']; ?>">
-                        <button type="submit" class="text-indigo-300 hover:text-red-500 transition-colors">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3m-7 0h8"/></svg>
-                        </button>
-                    </form>
-                </div>
-                <?php endforeach; ?>
-            </div>
-        </div>
-        <?php endif; ?>
+        <!-- THEME TAB -->
+        <div id="tab-theme" class="tab-content hidden">
+            <h2 class="text-2xl font-heading font-black text-dranhs-dark mb-1">Theme & Branding</h2>
+            <p class="text-sm text-slate-500 mb-8">Upload PNG images to customize the school logo, background, and footer logos. Recommended: PNG with transparency, max 2MB.</p>
 
-        <!-- Facilities List -->
-        <?php if (!empty($facilities)): ?>
-        <div class="mt-6">
-            <h3 class="text-xs font-black uppercase tracking-widest text-amber-600 mb-3 flex items-center gap-2">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
-                Faculty / Laboratories
-            </h3>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                <?php foreach ($facilities as $fc): ?>
-                <div class="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
-                    <div>
-                        <div class="text-sm font-black text-amber-800"><?php echo htmlspecialchars($fc['facility_name']); ?></div>
-                        <div class="text-[10px] font-bold text-amber-500 uppercase tracking-widest mt-0.5">
-                            Bldg <?php echo htmlspecialchars($fc['building_number']); ?> · Floor <?php echo htmlspecialchars($fc['floor_number']); ?> · Room <?php echo htmlspecialchars($fc['room_number']); ?>
+            <?php
+            // Helper: get current theme asset path
+            function theme_asset($key, $settings) {
+                return !empty($settings[$key]) ? '../' . $settings[$key] : null;
+            }
+            $assets = [
+                'school_logo'   => ['label' => 'School Logo',    'desc' => 'Replaces the logo icon in the navbar (admin & landing page). Recommended: 128×128px PNG.',  'icon' => 'M12 14l9-5-9-5-9 5 9 5z'],
+                'background'    => ['label' => 'Background Image','desc' => 'Used as the landing page background at 80% opacity. Recommended: 1920×1080px PNG/JPG.', 'icon' => 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z'],
+                'deped_logo'    => ['label' => 'DepEd Logo',      'desc' => 'Small logo shown in the footer. Recommended: 64×64px PNG.',  'icon' => 'M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z'],
+                'division_logo' => ['label' => 'Division Logo',   'desc' => 'Small logo shown in the footer beside DepEd logo. Recommended: 64×64px PNG.', 'icon' => 'M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z'],
+            ];
+            ?>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <?php foreach ($assets as $key => $info):
+                    $current = theme_asset($key, $settings);
+                    $has = $current !== null;
+                ?>
+                <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                    <div class="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-xl bg-dranhs-green/10 flex items-center justify-center shrink-0">
+                            <svg class="w-5 h-5 text-dranhs-green" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="<?php echo $info['icon']; ?>"/></svg>
+                        </div>
+                        <div>
+                            <h3 class="text-sm font-black text-dranhs-dark"><?php echo $info['label']; ?></h3>
+                            <p class="text-[10px] text-slate-400 mt-0.5"><?php echo $info['desc']; ?></p>
                         </div>
                     </div>
-                    <form method="POST" action="?page=system_settings" onsubmit="return confirm('Remove this facility?')">
-                        <input type="hidden" name="action" value="delete_facility">
-                        <input type="hidden" name="facility_id" value="<?php echo (int)$fc['id']; ?>">
-                        <button type="submit" class="text-amber-300 hover:text-red-500 transition-colors">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3m-7 0h8"/></svg>
-                        </button>
-                    </form>
+                    <div class="p-5 flex items-center gap-4">
+                        <!-- Preview -->
+                        <div class="w-16 h-16 rounded-xl border-2 <?php echo $has ? 'border-dranhs-green/30' : 'border-dashed border-slate-200'; ?> overflow-hidden bg-slate-50 flex items-center justify-center shrink-0">
+                            <?php if ($has): ?>
+                                <img src="<?php echo htmlspecialchars($current); ?>" alt="<?php echo $info['label']; ?>" class="w-full h-full object-contain">
+                            <?php else: ?>
+                                <svg class="w-7 h-7 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                            <?php endif; ?>
+                        </div>
+                        <!-- Upload / Remove -->
+                        <div class="flex-1 space-y-2">
+                            <form method="POST" action="?page=system_settings" enctype="multipart/form-data" class="flex gap-2">
+                                <input type="hidden" name="action" value="upload_theme_asset">
+                                <input type="hidden" name="asset_key" value="<?php echo $key; ?>">
+                                <label class="flex-1 cursor-pointer">
+                                    <span class="inline-flex items-center gap-1.5 w-full justify-center px-3 py-2 rounded-xl bg-dranhs-green text-white text-xs font-bold hover:bg-emerald-700 transition-colors">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                                        <?php echo $has ? 'Replace' : 'Upload'; ?>
+                                    </span>
+                                    <input type="file" name="theme_file" accept="image/png,image/jpeg,image/jpg,image/webp,image/svg+xml" class="hidden"
+                                        onchange="this.closest('form').submit()">
+                                </label>
+                            </form>
+                            <?php if ($has): ?>
+                            <form method="POST" action="?page=system_settings" onsubmit="return confirm('Remove this image?')">
+                                <input type="hidden" name="action" value="remove_theme_asset">
+                                <input type="hidden" name="asset_key" value="<?php echo $key; ?>">
+                                <button type="submit" class="w-full px-3 py-2 rounded-xl bg-red-50 text-red-600 text-xs font-bold hover:bg-red-100 transition-colors">Remove</button>
+                            </form>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    <?php if ($has): ?>
+                    <div class="px-5 pb-4">
+                        <p class="text-[9px] text-slate-400 font-semibold truncate">📁 <?php echo htmlspecialchars($settings[$key]); ?></p>
+                    </div>
+                    <?php endif; ?>
                 </div>
                 <?php endforeach; ?>
             </div>
         </div>
-        <?php endif; ?>
 
         <!-- CURRICULUM TAB -->
         <div id="tab-curriculum" class="tab-content hidden">

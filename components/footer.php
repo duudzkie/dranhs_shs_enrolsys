@@ -18,7 +18,13 @@
             <span class="sm:hidden">ROOMS</span>
         </button>
     </div>
-    <div class="text-center lg:text-right w-full lg:w-auto text-slate-500 text-[0.65rem] lg:text-[0.7rem] font-bold uppercase tracking-widest pb-1 lg:pb-0">
+    <div class="text-center lg:text-right w-full lg:w-auto text-slate-500 text-[0.65rem] lg:text-[0.7rem] font-bold uppercase tracking-widest pb-1 lg:pb-0 flex items-center gap-3 justify-center lg:justify-end">
+        <?php if (!empty($_nav_deped)): ?>
+            <img src="<?php echo htmlspecialchars($_nav_deped); ?>" alt="DepEd Logo" class="w-7 h-7 object-contain opacity-70">
+        <?php endif; ?>
+        <?php if (!empty($_nav_division)): ?>
+            <img src="<?php echo htmlspecialchars($_nav_division); ?>" alt="Division Logo" class="w-7 h-7 object-contain opacity-70">
+        <?php endif; ?>
         &copy; 2026 Daniel R. Aguinaldo National High School, all rights reserved
     </div>
 </footer>

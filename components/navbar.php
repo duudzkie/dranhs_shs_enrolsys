@@ -1,13 +1,30 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
+
+// Load theme settings
+$_nav_logo = null;
+$_nav_conn = @new mysqli('localhost', 'root', '', 'dranhswin');
+if (!$_nav_conn->connect_error) {
+    $_nav_res = $_nav_conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('school_logo','background','deped_logo','division_logo')");
+    $_nav_theme = [];
+    if ($_nav_res) { while ($_nr = $_nav_res->fetch_assoc()) $_nav_theme[$_nr['setting_key']] = $_nr['setting_value']; }
+    $_nav_conn->close();
+}
+$_nav_logo     = !empty($_nav_theme['school_logo'])    ? $_nav_theme['school_logo']    : null;
+$_nav_bg       = !empty($_nav_theme['background'])     ? $_nav_theme['background']     : null;
+$_nav_deped    = !empty($_nav_theme['deped_logo'])     ? $_nav_theme['deped_logo']     : null;
+$_nav_division = !empty($_nav_theme['division_logo'])  ? $_nav_theme['division_logo']  : null;
 ?>
 
 <!-- Top Navbar (components/navbar.php) -->
 <nav class="w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800 py-3 px-4 lg:px-8 z-40 flex flex-col lg:flex-row justify-between items-center gap-3 lg:gap-0 fixed top-0 left-0 shadow-sm transition-colors duration-300">
     <a href="index.php" class="flex items-center gap-4 w-full justify-start lg:w-auto hover:opacity-80 transition-opacity">
         <div class="w-10 h-10 lg:w-12 lg:h-12 rounded-full border border-slate-200 dark:border-slate-700 flex justify-center items-center overflow-hidden relative shadow-sm bg-white dark:bg-slate-800 shrink-0">
-            <!-- You can replace the src attribute with your actual logo image file path -->
-            <img src="https://ui-avatars.com/api/?name=DR&background=009b5a&color=fff&size=128" alt="School Logo" class="w-full h-full object-cover z-20" />
+            <?php if ($_nav_logo): ?>
+                <img src="<?php echo htmlspecialchars($_nav_logo); ?>" alt="School Logo" class="w-full h-full object-contain z-20" />
+            <?php else: ?>
+                <img src="https://ui-avatars.com/api/?name=DR&background=009b5a&color=fff&size=128" alt="School Logo" class="w-full h-full object-cover z-20" />
+            <?php endif; ?>
         </div>
         
         <div class="flex flex-col">
