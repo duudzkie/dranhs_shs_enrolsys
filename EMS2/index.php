@@ -8,15 +8,20 @@ $db_name = 'dranhswin';
 $conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
 
 $enrollment_locked = false;
+$_theme = [];
 if (!$conn->connect_error) {
-    $res = $conn->query("SELECT setting_value FROM system_settings WHERE setting_key = 'enrollment_status'");
-    if ($res && $res->num_rows > 0) {
-        $row = $res->fetch_assoc();
-        if ($row['setting_value'] === 'locked') {
-            $enrollment_locked = true;
+    $res = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('enrollment_status','school_logo','background','deped_logo','division_logo')");
+    if ($res) {
+        while ($row = $res->fetch_assoc()) {
+            if ($row['setting_key'] === 'enrollment_status') {
+                $enrollment_locked = ($row['setting_value'] === 'locked');
+            } else {
+                $_theme[$row['setting_key']] = $row['setting_value'];
+            }
         }
     }
 }
+$_bg_image = !empty($_theme['background']) ? $_theme['background'] : null;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -62,10 +67,13 @@ if (!$conn->connect_error) {
         }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col no-scroll font-sans relative dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300">
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col no-scroll font-sans relative dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300"
+    <?php if ($_bg_image): ?>
+    style="background-image: url('<?php echo htmlspecialchars($_bg_image); ?>'); background-size: cover; background-position: center; background-attachment: fixed;"
+    <?php endif; ?>>
 
     <!-- Background overlay -->
-    <div class="absolute inset-0 z-[-1] bg-school-pattern"></div>
+    <div class="absolute inset-0 z-[-1] <?php echo $_bg_image ? 'bg-white/80 dark:bg-slate-900/80' : 'bg-school-pattern'; ?>"></div>
 
     <!-- Include Navbar -->
     <?php include 'components/navbar.php'; ?>
