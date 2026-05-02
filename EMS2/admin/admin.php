@@ -1,9 +1,30 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
-// Check if user is actually logged in
+// Check if user is actually logged in — also verify user still exists in DB
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     header('Location: ../login.php');
     exit;
+}
+
+// Validate session against DB (prevents stale sessions)
+$_sv_conn = new mysqli('localhost', 'root', '', 'dranhswin');
+if (!$_sv_conn->connect_error) {
+    $_sv_stmt = $_sv_conn->prepare("SELECT id, role FROM users WHERE id = ? LIMIT 1");
+    if ($_sv_stmt) {
+        $_sv_stmt->bind_param("i", $_SESSION['user_id']);
+        $_sv_stmt->execute();
+        $_sv_result = $_sv_stmt->get_result()->fetch_assoc();
+        $_sv_stmt->close();
+        if (!$_sv_result) {
+            // User no longer exists — destroy session and redirect
+            session_destroy();
+            header('Location: ../login.php');
+            exit;
+        }
+        // Sync role in case it changed
+        $_SESSION['role'] = $_sv_result['role'];
+    }
+    $_sv_conn->close();
 }
 $loggedIn = true;
 $userRole = $_SESSION['role'] ?? 'admin';
