@@ -35,10 +35,33 @@ if (session_status() === PHP_SESSION_NONE) session_start();
             </svg>
         </button>
 
-        <form class="flex flex-row items-center gap-2 w-full max-w-md lg:w-auto lg:max-w-none" action="login.php" method="POST">
-            <input type="text" name="username" placeholder="Username" required class="w-1/3 lg:w-[150px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 lg:px-4 rounded-full text-slate-800 dark:text-white text-sm outline-none transition-all focus:border-dranhs-green dark:focus:border-emerald-500 focus:ring-2 focus:ring-dranhs-green/20 placeholder-slate-400 dark:placeholder-slate-500 font-medium shadow-sm">
-            <input type="password" name="password" placeholder="Password" required class="w-1/3 lg:w-[150px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 lg:px-4 rounded-full text-slate-800 dark:text-white text-sm outline-none transition-all focus:border-dranhs-green dark:focus:border-emerald-500 focus:ring-2 focus:ring-dranhs-green/20 placeholder-slate-400 dark:placeholder-slate-500 font-medium shadow-sm">
-            <button type="submit" class="flex-1 lg:flex-none bg-dranhs-green hover:bg-emerald-700 text-white border-none px-4 py-2 rounded-full font-bold text-sm cursor-pointer transition-transform shadow-md hover:-translate-y-0.5 whitespace-nowrap text-center">LOGIN</button>
-        </form>
+        <div class="relative flex flex-row items-center gap-2 w-full max-w-md lg:w-auto lg:max-w-none">
+            <form id="nav-login-form" class="flex flex-row items-center gap-2" action="login.php" method="POST">
+                <input type="text" name="username" id="nav-username" placeholder="Username" required
+                    class="w-1/3 lg:w-[150px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 lg:px-4 rounded-full text-slate-800 dark:text-white text-sm outline-none transition-all focus:border-dranhs-green dark:focus:border-emerald-500 focus:ring-2 focus:ring-dranhs-green/20 placeholder-slate-400 dark:placeholder-slate-500 font-medium shadow-sm <?php echo isset($_GET['auth_error']) ? 'border-red-400 dark:border-red-500' : ''; ?>">
+                <input type="password" name="password" id="nav-password" placeholder="Password" required
+                    class="w-1/3 lg:w-[150px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 lg:px-4 rounded-full text-slate-800 dark:text-white text-sm outline-none transition-all focus:border-dranhs-green dark:focus:border-emerald-500 focus:ring-2 focus:ring-dranhs-green/20 placeholder-slate-400 dark:placeholder-slate-500 font-medium shadow-sm <?php echo isset($_GET['auth_error']) ? 'border-red-400 dark:border-red-500' : ''; ?>">
+                <button type="submit" class="flex-1 lg:flex-none bg-dranhs-green hover:bg-emerald-700 text-white border-none px-4 py-2 rounded-full font-bold text-sm cursor-pointer transition-transform shadow-md hover:-translate-y-0.5 whitespace-nowrap text-center">LOGIN</button>
+            </form>
+
+            <?php if (isset($_GET['auth_error'])): ?>
+            <div id="nav-login-error" class="absolute top-full right-0 mt-2 z-50 flex items-center gap-2 bg-red-50 dark:bg-red-900/80 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 text-xs font-bold px-4 py-2.5 rounded-xl shadow-lg whitespace-nowrap">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                <?php
+                $err_code = $_GET['auth_error'] ?? '';
+                echo $err_code === 'user' ? 'Username not found.' : 'Incorrect password.';
+                ?>
+                <!-- Arrow pointing up -->
+                <span class="absolute -top-1.5 right-6 w-3 h-3 bg-red-50 dark:bg-red-900/80 border-l border-t border-red-200 dark:border-red-700 rotate-45"></span>
+            </div>
+            <script>
+                // Auto-dismiss after 4 seconds
+                setTimeout(() => {
+                    const el = document.getElementById('nav-login-error');
+                    if (el) el.style.display = 'none';
+                }, 4000);
+            </script>
+            <?php endif; ?>
+        </div>
     </div>
 </nav>
