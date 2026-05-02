@@ -46,9 +46,9 @@ if ($res) {
     }
 }
 
-// Fetch annex entries (sections outside Bldg 14/15)
+// Fetch annex entries — only those NOT in Bldg 14 or 15
 $annex = [];
-$ar = $conn->query("SELECT * FROM room_annex ORDER BY building_number, floor_number, room_number");
+$ar = $conn->query("SELECT * FROM room_annex WHERE building_number NOT IN ('14','15') ORDER BY building_number, floor_number, room_number");
 if ($ar) { while ($r = $ar->fetch_assoc()) $annex[] = $r; $ar->close(); }
 
 // Fetch facilities
