@@ -58,82 +58,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             header('Location: admin/admin.php');
             exit;
         } else {
-            $error = 'Invalid password.';
+            // Wrong password — redirect back to index with error
+            $stmt->close();
+            $conn->close();
+            header('Location: index.php?auth_error=pass');
+            exit;
         }
     } else {
-        $error = 'No user found with that username.';
+        // User not found — redirect back to index with error
+        $stmt->close();
+        $conn->close();
+        header('Location: index.php?auth_error=user');
+        exit;
     }
 
     $stmt->close();
     $conn->close();
 }
-?>
-<!DOCTYPE html>
-<html lang="en" class="dark">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login | DRANHS</title>
-
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        "dranhs-green": "#009b5a",
-                        "dranhs-dark": "#202221",
-                    },
-                },
-            },
-            darkMode: 'class'
-        };
-    </script>
-</head>
-
-<body class="bg-slate-100 dark:bg-slate-950 transition-colors duration-300 antialiased">
-    <?php include_once 'components/navbar.php'; ?>
-
-    <!-- Main Content -->
-    <main class="w-full min-h-screen h-full flex items-center justify-center pt-28 pb-10 px-4 lg:px-8">
-        <div class="w-full max-w-md mx-auto">
-            <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 lg:p-8 rounded-2xl shadow-lg">
-                <h1 class="text-3xl font-black text-dranhs-dark dark:text-white tracking-tight text-center">Admin Login</h1>
-                <p class="text-slate-500 dark:text-slate-400 text-sm mt-2 text-center">Access the DRANHS enrollment system.</p>
-
-                <?php if ($error) : ?>
-                    <div class="mt-6 bg-red-100 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 text-red-700 dark:text-red-400 px-4 py-3 rounded-lg text-sm">
-                        <?= $error ?>
-                    </div>
-                <?php endif; ?>
-
-                <form class="mt-6" action="login.php" method="POST">
-                    <div class="flex flex-col gap-5">
-                        <div class="flex flex-col gap-2">
-                            <label for="username" class="text-sm font-bold text-slate-700 dark:text-slate-300">Username</label>
-                            <input type="text" id="username" name="username" placeholder="Enter your username" required class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-lg text-slate-800 dark:text-white text-sm outline-none transition-all focus:border-dranhs-green dark:focus:border-emerald-500 focus:ring-2 focus:ring-dranhs-green/20 placeholder-slate-400 dark:placeholder-slate-500 font-medium">
-                        </div>
-                        <div class="flex flex-col gap-2">
-                            <label for="password" class="text-sm font-bold text-slate-700 dark:text-slate-300">Password</label>
-                            <input type="password" id="password" name="password" placeholder="Enter your password" required class="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-4 py-3 rounded-lg text-slate-800 dark:text-white text-sm outline-none transition-all focus:border-dranhs-green dark:focus:border-emerald-500 focus:ring-2 focus:ring-dranhs-green/20 placeholder-slate-400 dark:placeholder-slate-500 font-medium">
-                        </div>
-                        <button type="submit" class="w-full bg-dranhs-green hover:bg-emerald-700 text-white border-none px-6 py-3 rounded-lg font-bold text-sm cursor-pointer transition-transform shadow-md hover:-translate-y-0.5">
-                            LOGIN
-                        </button>
-                    </div>
-                </form>
-            </div>
-
-            <p class="text-xs text-slate-500 dark:text-slate-600 text-center mt-6">
-                &copy; <?php echo date("Y"); ?> DRANHS. All rights reserved.
-            </p>
-        </div>
-    </main>
-
-    <script src="script.js"></script>
-</body>
-
-</html>
