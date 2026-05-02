@@ -238,14 +238,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $bldg = trim($_POST['facility_building'] ?? '');
             $flr  = trim($_POST['facility_floor']    ?? '');
             $rm   = trim($_POST['facility_room']     ?? '');
-            if ($name && $bldg && $flr && $rm) {
+            if ($name) {
                 $stmt = $conn->prepare("INSERT INTO room_facilities (facility_name, building_number, floor_number, room_number) VALUES (?,?,?,?)");
                 if ($stmt) { $stmt->bind_param("ssss", $name, $bldg, $flr, $rm); $stmt->execute(); $stmt->close(); }
                 $toast_message = 'Facility added.';
                 $toast_type = 'success';
             } else {
-                $toast_message = 'Please fill in all fields.';
+                $toast_message = 'Please enter a facility name.';
                 $toast_type = 'error';
+            }
+        }
+        elseif ($_POST['action'] === 'assign_facility_room') {
+            $fid  = intval($_POST['facility_id'] ?? 0);
+            $bldg = trim($_POST['facility_building'] ?? '');
+            $flr  = trim($_POST['facility_floor']    ?? '');
+            $rm   = trim($_POST['facility_room']     ?? '');
+            if ($fid > 0 && $bldg && $flr && $rm) {
+                $stmt = $conn->prepare("UPDATE room_facilities SET building_number=?, floor_number=?, room_number=? WHERE id=?");
+                if ($stmt) { $stmt->bind_param("sssi", $bldg, $flr, $rm, $fid); $stmt->execute(); $stmt->close(); }
+                $toast_message = 'Facility room assigned.';
+                $toast_type = 'success';
             }
         }
         elseif ($_POST['action'] === 'delete_facility') {
@@ -586,11 +598,11 @@ function getRoomAssignment($roomNumber, $registries) {
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-8">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-x-12 gap-y-8">
                 <?php 
                 $dirs = [
-                    'g11_sections' => ['title' => 'Grade 11 Directory', 'color' => 'blue'],
-                    'g12_sections' => ['title' => 'Grade 12 Directory', 'color' => 'pink']
+                    'g11_sections' => ['title' => 'Grade 11 Section', 'color' => 'blue'],
+                    'g12_sections' => ['title' => 'Grade 12 Section', 'color' => 'pink'],
                 ];
 
                 foreach ($dirs as $dk => $dv): 
@@ -637,6 +649,58 @@ function getRoomAssignment($roomNumber, $registries) {
                     </div>
                 </div>
                 <?php endforeach; ?>
+
+                <!-- 3rd column: Faculty / Laboratory -->
+                <div>
+                    <div class="border-b-2 border-amber-200 mb-4 pb-2">
+                        <h3 class="text-xs font-black uppercase tracking-[0.2em] text-amber-600 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-amber-500 shrink-0"></span>
+                            Faculty / Laboratory
+                        </h3>
+                    </div>
+                    <div class="space-y-4">
+                        <?php if (empty($facilities)): ?>
+                            <p class="text-sm text-slate-400 font-medium">No facilities added yet.</p>
+                        <?php endif; ?>
+                        <?php foreach ($facilities as $fc): ?>
+                        <div class="bg-white border border-slate-100 p-4 rounded-2xl flex items-center justify-between shadow-sm hover:shadow-md hover:border-slate-200 transition-all group">
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center text-amber-400 group-hover:bg-amber-100 transition-colors">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                                </div>
+                                <div class="text-left">
+                                    <h4 class="font-bold text-slate-800 tracking-wide uppercase"><?php echo htmlspecialchars($fc['facility_name']); ?></h4>
+                                    <?php if ($fc['room_number']): ?>
+                                        <p class="text-[10px] font-bold uppercase tracking-widest text-amber-600 flex items-center gap-1 mt-0.5">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
+                                            Bldg <?php echo htmlspecialchars($fc['building_number']); ?> · Floor <?php echo htmlspecialchars($fc['floor_number']); ?> · Room <?php echo htmlspecialchars($fc['room_number']); ?>
+                                        </p>
+                                    <?php else: ?>
+                                        <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1 mt-0.5">
+                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
+                                            Location Pending
+                                        </p>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button onclick="openFacilityMapModal(<?php echo (int)$fc['id']; ?>, '<?php echo addslashes($fc['facility_name']); ?>')" class="bg-amber-500 hover:bg-amber-600 text-white font-bold text-[10px] uppercase tracking-widest px-4 py-2.5 rounded-full shadow-lg shadow-amber-500/20 transition-transform hover:-translate-y-0.5 flex items-center gap-1.5 focus:outline-none">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                                    Map
+                                </button>
+                                <form method="POST" action="?page=system_settings" onsubmit="return confirm('Remove?')" class="inline">
+                                    <input type="hidden" name="action" value="delete_facility">
+                                    <input type="hidden" name="facility_id" value="<?php echo (int)$fc['id']; ?>">
+                                    <button type="submit" class="text-slate-300 hover:text-red-500 transition-colors p-1">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3m-7 0h8"/></svg>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+
             </div>
 
         </div> <!-- END TAB ROOM ASSIGNMENT -->
@@ -982,12 +1046,49 @@ function getRoomAssignment($roomNumber, $registries) {
 </div>
 
 <!-- ===================================== -->
+<!-- FACILITY MAP MODAL -->
+<div id="facility-map-modal" class="fixed inset-0 z-[115] hidden items-center justify-center p-4" style="background:rgba(15,23,42,0.6);">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+        <div class="bg-amber-500 px-6 py-5 flex items-center justify-between">
+            <div>
+                <p class="text-xs font-bold uppercase tracking-widest text-amber-100 mb-0.5">Assign Location</p>
+                <h3 id="facility-map-title" class="font-heading font-black text-lg text-white">Facility Name</h3>
+            </div>
+            <button type="button" id="facility-map-close" class="w-9 h-9 rounded-full bg-white/10 text-white hover:bg-white/20 text-xl flex items-center justify-center">&times;</button>
+        </div>
+        <form method="POST" action="?page=system_settings" class="p-6 space-y-4">
+            <input type="hidden" name="action" value="assign_facility_room">
+            <input type="hidden" name="facility_id" id="facility-map-id" value="">
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Building No.</label>
+                    <input type="text" name="facility_building" required placeholder="e.g. 14"
+                        class="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-sm font-semibold focus:border-amber-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Floor</label>
+                    <input type="text" name="facility_floor" required placeholder="e.g. 1"
+                        class="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-sm font-semibold focus:border-amber-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Room No.</label>
+                    <input type="text" name="facility_room" required placeholder="e.g. 101"
+                        class="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-sm font-semibold focus:border-amber-500 outline-none">
+                </div>
+            </div>
+            <div class="flex gap-3 pt-1">
+                <button type="button" id="facility-map-cancel" class="flex-1 px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-50">Cancel</button>
+                <button type="submit" class="flex-1 px-4 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600">Save Location</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- MAP BUILDING MODAL -->
 <!-- ===================================== -->
 <!-- ANNEX ENTRY MODAL -->
 <div id="annex-modal" class="fixed inset-0 z-[110] hidden items-center justify-center p-4" style="background:rgba(15,23,42,0.6);">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-        <div class="bg-indigo-600 px-6 py-5 flex items-center justify-between">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">        <div class="bg-indigo-600 px-6 py-5 flex items-center justify-between">
             <div>
                 <p class="text-xs font-bold uppercase tracking-widest text-indigo-200 mb-0.5">Room Assignment</p>
                 <h3 class="font-heading font-black text-xl text-white">Manual Annex Entry</h3>
@@ -1041,7 +1142,7 @@ function getRoomAssignment($roomNumber, $registries) {
     </div>
 </div>
 
-<!-- FACILITY MODAL -->
+<!-- FACILITY MODAL — name only, MAP button handles location -->
 <div id="facility-modal" class="fixed inset-0 z-[110] hidden items-center justify-center p-4" style="background:rgba(15,23,42,0.6);">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
         <div class="bg-amber-500 px-6 py-5 flex items-center justify-between">
@@ -1057,23 +1158,7 @@ function getRoomAssignment($roomNumber, $registries) {
                 <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Facility Name</label>
                 <input type="text" name="facility_name" required placeholder="e.g. SHS Faculty, Cookery Laboratory, ICT Lab"
                     class="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:border-amber-500 outline-none">
-            </div>
-            <div class="grid grid-cols-3 gap-3">
-                <div>
-                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Building No.</label>
-                    <input type="text" name="facility_building" required placeholder="e.g. 14"
-                        class="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-sm font-semibold focus:border-amber-500 outline-none">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Floor</label>
-                    <input type="text" name="facility_floor" required placeholder="e.g. 1"
-                        class="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-sm font-semibold focus:border-amber-500 outline-none">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Room No.</label>
-                    <input type="text" name="facility_room" required placeholder="e.g. 101"
-                        class="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-sm font-semibold focus:border-amber-500 outline-none">
-                </div>
+                <p class="text-xs text-slate-400 mt-1.5">After saving, use the Map button to assign a room location.</p>
             </div>
             <div class="flex gap-3 pt-1">
                 <button type="button" id="facility-modal-cancel" class="flex-1 px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-50">Cancel</button>
@@ -1412,10 +1497,17 @@ function getRoomAssignment($roomNumber, $registries) {
     const mapModal = document.getElementById('map-modal');
     const mapContent = document.getElementById('map-modal-content');
     
+    function openFacilityMapModal(facilityId, facilityName) {
+        const m = document.getElementById('facility-map-modal');
+        document.getElementById('facility-map-id').value = facilityId;
+        document.getElementById('facility-map-title').textContent = facilityName;
+        m.classList.remove('hidden');
+        m.classList.add('flex');
+    }
+
     function openMapModal(sectionId, sectionName) {
         document.getElementById('assign_section_id').value = sectionId;
-        document.getElementById('mapping-section-name').textContent = sectionName;
-        
+        document.getElementById('mapping-section-name').textContent = sectionName;        
         mapModal.classList.remove('hidden');
         // trigger reflow
         void mapModal.offsetWidth;
@@ -1485,6 +1577,17 @@ function getRoomAssignment($roomNumber, $registries) {
         document.getElementById('facility-modal-cancel').addEventListener('click', () => {
             facilityModal.classList.add('hidden');
             facilityModal.classList.remove('flex');
+        });
+
+        // Facility map modal
+        const facilityMapModal = document.getElementById('facility-map-modal');
+        document.getElementById('facility-map-close').addEventListener('click', () => {
+            facilityMapModal.classList.add('hidden');
+            facilityMapModal.classList.remove('flex');
+        });
+        document.getElementById('facility-map-cancel').addEventListener('click', () => {
+            facilityMapModal.classList.add('hidden');
+            facilityMapModal.classList.remove('flex');
         });
 
         // Template file input — show filename + enable submit
