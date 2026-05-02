@@ -250,12 +250,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         elseif ($_POST['action'] === 'assign_facility_room') {
             $fid  = intval($_POST['facility_id'] ?? 0);
-            $bldg = trim($_POST['facility_building'] ?? '');
-            $flr  = trim($_POST['facility_floor']    ?? '');
-            $rm   = trim($_POST['facility_room']     ?? '');
-            if ($fid > 0 && $bldg && $flr && $rm) {
+            $room = trim($_POST['room'] ?? '');
+            if ($fid > 0 && $room !== '') {
+                // Derive building/floor from room number
+                $bldg = ''; $flr = '';
+                $rn = intval($room);
+                if ($rn >= 41 && $rn <= 56) { $bldg = '14'; $flr = (string)ceil(($rn - 40) / 4); }
+                elseif ($rn >= 21 && $rn <= 40) { $bldg = '15'; $flr = (string)ceil(($rn - 20) / 5); }
                 $stmt = $conn->prepare("UPDATE room_facilities SET building_number=?, floor_number=?, room_number=? WHERE id=?");
-                if ($stmt) { $stmt->bind_param("sssi", $bldg, $flr, $rm, $fid); $stmt->execute(); $stmt->close(); }
+                if ($stmt) { $stmt->bind_param("sssi", $bldg, $flr, $room, $fid); $stmt->execute(); $stmt->close(); }
                 $toast_message = 'Facility room assigned.';
                 $toast_type = 'success';
             }
@@ -1046,44 +1049,6 @@ function getRoomAssignment($roomNumber, $registries) {
 </div>
 
 <!-- ===================================== -->
-<!-- FACILITY MAP MODAL -->
-<div id="facility-map-modal" class="fixed inset-0 z-[115] hidden items-center justify-center p-4" style="background:rgba(15,23,42,0.6);">
-    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-        <div class="bg-amber-500 px-6 py-5 flex items-center justify-between">
-            <div>
-                <p class="text-xs font-bold uppercase tracking-widest text-amber-100 mb-0.5">Assign Location</p>
-                <h3 id="facility-map-title" class="font-heading font-black text-lg text-white">Facility Name</h3>
-            </div>
-            <button type="button" id="facility-map-close" class="w-9 h-9 rounded-full bg-white/10 text-white hover:bg-white/20 text-xl flex items-center justify-center">&times;</button>
-        </div>
-        <form method="POST" action="?page=system_settings" class="p-6 space-y-4">
-            <input type="hidden" name="action" value="assign_facility_room">
-            <input type="hidden" name="facility_id" id="facility-map-id" value="">
-            <div class="grid grid-cols-3 gap-3">
-                <div>
-                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Building No.</label>
-                    <input type="text" name="facility_building" required placeholder="e.g. 14"
-                        class="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-sm font-semibold focus:border-amber-500 outline-none">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Floor</label>
-                    <input type="text" name="facility_floor" required placeholder="e.g. 1"
-                        class="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-sm font-semibold focus:border-amber-500 outline-none">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Room No.</label>
-                    <input type="text" name="facility_room" required placeholder="e.g. 101"
-                        class="w-full border-2 border-slate-200 rounded-xl px-3 py-3 text-sm font-semibold focus:border-amber-500 outline-none">
-                </div>
-            </div>
-            <div class="flex gap-3 pt-1">
-                <button type="button" id="facility-map-cancel" class="flex-1 px-4 py-2.5 rounded-xl border-2 border-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-50">Cancel</button>
-                <button type="submit" class="flex-1 px-4 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600">Save Location</button>
-            </div>
-        </form>
-    </div>
-</div>
-
 <!-- MAP BUILDING MODAL -->
 <!-- ===================================== -->
 <!-- ANNEX ENTRY MODAL -->
@@ -1190,8 +1155,9 @@ function getRoomAssignment($roomNumber, $registries) {
         <!-- Scrollable Content -->
         <div class="p-6 lg:p-8 overflow-y-auto sidebar-scroll">
             <form id="assignRoomForm" method="POST" action="?page=system_settings">
-                <input type="hidden" name="action" value="assign_room">
+                <input type="hidden" name="action" id="assign_action" value="assign_room">
                 <input type="hidden" name="section_id" id="assign_section_id" value="">
+                <input type="hidden" name="facility_id" id="assign_facility_id" value="">
                 <input type="hidden" name="room" id="assign_room_number" value="">
 
                 <!-- BLDG 14 VIEW (4 Floors, 4 Rooms = 41 to 56) -->
@@ -1498,15 +1464,26 @@ function getRoomAssignment($roomNumber, $registries) {
     const mapContent = document.getElementById('map-modal-content');
     
     function openFacilityMapModal(facilityId, facilityName) {
-        const m = document.getElementById('facility-map-modal');
-        document.getElementById('facility-map-id').value = facilityId;
-        document.getElementById('facility-map-title').textContent = facilityName;
-        m.classList.remove('hidden');
-        m.classList.add('flex');
+        // Reuse the same building map modal, switch to facility mode
+        document.getElementById('assign_action').value = 'assign_facility_room';
+        document.getElementById('assign_facility_id').value = facilityId;
+        document.getElementById('assign_section_id').value = '';
+        document.getElementById('mapping-section-name').textContent = facilityName;
+        mapModal.classList.remove('hidden');
+        mapModal.classList.add('flex');
+        mapModal.classList.remove('opacity-0');
+        mapContent.classList.remove('scale-95');
+        setTimeout(() => {
+            mapModal.classList.remove('opacity-0');
+            mapContent.classList.remove('scale-95');
+        }, 10);
     }
 
     function openMapModal(sectionId, sectionName) {
+        // Section mode
+        document.getElementById('assign_action').value = 'assign_room';
         document.getElementById('assign_section_id').value = sectionId;
+        document.getElementById('assign_facility_id').value = '';
         document.getElementById('mapping-section-name').textContent = sectionName;        
         mapModal.classList.remove('hidden');
         // trigger reflow
@@ -1577,17 +1554,6 @@ function getRoomAssignment($roomNumber, $registries) {
         document.getElementById('facility-modal-cancel').addEventListener('click', () => {
             facilityModal.classList.add('hidden');
             facilityModal.classList.remove('flex');
-        });
-
-        // Facility map modal
-        const facilityMapModal = document.getElementById('facility-map-modal');
-        document.getElementById('facility-map-close').addEventListener('click', () => {
-            facilityMapModal.classList.add('hidden');
-            facilityMapModal.classList.remove('flex');
-        });
-        document.getElementById('facility-map-cancel').addEventListener('click', () => {
-            facilityMapModal.classList.add('hidden');
-            facilityMapModal.classList.remove('flex');
         });
 
         // Template file input — show filename + enable submit
