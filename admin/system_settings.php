@@ -352,6 +352,7 @@ if ($res) {
 $annex_available_sections = [];
 $avs = $conn->query("SELECT id, name, grade_level FROM add_sections ORDER BY grade_level ASC, name ASC");
 if ($avs) { while ($r = $avs->fetch_assoc()) $annex_available_sections[] = $r; $avs->close(); }
+$annex_entries = [];
 $ar = $conn->query("SELECT * FROM room_annex ORDER BY building_number, floor_number, room_number");
 if ($ar) { while ($r = $ar->fetch_assoc()) $annex_entries[] = $r; $ar->close(); }
 
