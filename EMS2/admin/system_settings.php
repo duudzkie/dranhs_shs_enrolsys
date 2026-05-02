@@ -212,7 +212,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
         elseif ($_POST['action'] === 'add_annex') {
-            $sec  = trim($_POST['annex_section']  ?? '');
+            // Accept either dropdown selection or manual text input
+            $sec  = trim($_POST['annex_section'] ?? '');
+            if (empty($sec)) $sec = trim($_POST['annex_section_manual'] ?? '');
             $bldg = trim($_POST['annex_building']  ?? '');
             $flr  = trim($_POST['annex_floor']     ?? '');
             $rm   = trim($_POST['annex_room']      ?? '');
@@ -708,15 +710,21 @@ function getRoomAssignment($roomNumber, $registries) {
 
         </div> <!-- END TAB ROOM ASSIGNMENT -->
 
-        <!-- Annex Entries List -->
-        <?php if (!empty($annex_entries)): ?>
+        <!-- Annex Entries List — only show entries NOT in Bldg 14 or 15 -->
+        <?php
+        $other_annex = array_filter($annex_entries, function($ae) {
+            $b = trim($ae['building_number'] ?? '');
+            return $b !== '14' && $b !== '15';
+        });
+        ?>
+        <?php if (!empty($other_annex)): ?>
         <div class="mt-8">
             <h3 class="text-xs font-black uppercase tracking-widest text-indigo-600 mb-3 flex items-center gap-2">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"/></svg>
-                Manual Annex Entries
+                Manual Annex Entries (Other Buildings)
             </h3>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                <?php foreach ($annex_entries as $ae): ?>
+                <?php foreach ($other_annex as $ae): ?>
                 <div class="flex items-center justify-between bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3">
                     <div>
                         <div class="text-sm font-black text-indigo-800"><?php echo htmlspecialchars($ae['section_name']); ?></div>
@@ -1064,7 +1072,8 @@ function getRoomAssignment($roomNumber, $registries) {
             <input type="hidden" name="action" value="add_annex">
             <div>
                 <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Section Name</label>
-                <select name="annex_section" required
+                <!-- Dropdown mode (default) -->
+                <select id="annex-section-select" name="annex_section"
                     class="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold focus:border-indigo-500 outline-none bg-white">
                     <option value="">Select a section...</option>
                     <?php
@@ -1081,6 +1090,19 @@ function getRoomAssignment($roomNumber, $registries) {
                     <?php endforeach; ?>
                     <?php if ($last_grade !== '') echo '</optgroup>'; ?>
                 </select>
+                <!-- Manual text input (hidden by default) -->
+                <input type="text" id="annex-section-manual"
+                    placeholder="Type section name..."
+                    class="hidden w-full border-2 border-indigo-300 rounded-xl px-4 py-3 text-sm font-semibold focus:border-indigo-500 outline-none mt-0">
+                <!-- Toggle links -->
+                <button type="button" id="annex-toggle-manual"
+                    class="mt-1.5 text-[10px] font-bold text-indigo-400 hover:text-indigo-600 uppercase tracking-widest">
+                    ✏ Not in list? Type it manually
+                </button>
+                <button type="button" id="annex-toggle-dropdown"
+                    class="hidden mt-1.5 text-[10px] font-bold text-indigo-400 hover:text-indigo-600 uppercase tracking-widest">
+                    ← Back to dropdown
+                </button>
             </div>
             <div class="grid grid-cols-3 gap-3">
                 <div>
@@ -1541,6 +1563,34 @@ function getRoomAssignment($roomNumber, $registries) {
         document.getElementById('annex-modal-cancel').addEventListener('click', () => {
             annexModal.classList.add('hidden');
             annexModal.classList.remove('flex');
+        });
+
+        // Annex section toggle: dropdown ↔ manual text
+        const annexSelect  = document.getElementById('annex-section-select');
+        const annexManual  = document.getElementById('annex-section-manual');
+        const toggleManual = document.getElementById('annex-toggle-manual');
+        const toggleDrop   = document.getElementById('annex-toggle-dropdown');
+
+        toggleManual.addEventListener('click', () => {
+            annexSelect.removeAttribute('required');
+            annexSelect.classList.add('hidden');
+            annexManual.setAttribute('required', 'required');
+            annexManual.classList.remove('hidden');
+            toggleManual.classList.add('hidden');
+            toggleDrop.classList.remove('hidden');
+            // Sync value: manual input drives annex_section on submit
+            annexManual.name = 'annex_section';
+            annexSelect.name = '';
+        });
+        toggleDrop.addEventListener('click', () => {
+            annexManual.removeAttribute('required');
+            annexManual.classList.add('hidden');
+            annexSelect.setAttribute('required', 'required');
+            annexSelect.classList.remove('hidden');
+            toggleDrop.classList.add('hidden');
+            toggleManual.classList.remove('hidden');
+            annexSelect.name = 'annex_section';
+            annexManual.name = '';
         });
 
         document.getElementById('open-facility-modal').addEventListener('click', () => {
