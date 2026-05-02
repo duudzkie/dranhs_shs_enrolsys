@@ -40,6 +40,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // If adviser, store their linked adviser_id and section
             if ($user['role'] === 'adviser') {
+                // Ensure user_id column exists (MySQL 5.7 safe)
+                $chk = $conn->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='dranhswin' AND TABLE_NAME='advisers_accounts' AND COLUMN_NAME='user_id'");
+                if ($chk && $chk->num_rows === 0) {
+                    $conn->query("ALTER TABLE advisers_accounts ADD COLUMN user_id INT NULL");
+                }
                 $adv_stmt = $conn->prepare("SELECT a.id AS adviser_id, c.section_name, c.id AS classroom_id
                     FROM advisers_accounts a
                     LEFT JOIN classrooms c ON c.adviser_id = a.id

@@ -17,10 +17,29 @@ $db_pass = '';
 $db_name = 'dranhswin';
 $conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
 
+// ── PRG: read flash message from session ──────────────────────────────────────
 $toast_message = '';
-$toast_type = '';
+$toast_type    = '';
+if (!empty($_SESSION['_ss_toast'])) {
+    $toast_message = $_SESSION['_ss_toast']['msg'];
+    $toast_type    = $_SESSION['_ss_toast']['type'];
+    unset($_SESSION['_ss_toast']);
+}
 
-// Ensure theme uploads directory exists
+// Helper: set flash and redirect (PRG pattern — prevents duplicate on refresh)
+function ss_redirect($msg, $type = 'success', $tab = '') {
+    $_SESSION['_ss_toast'] = ['msg' => $msg, 'type' => $type];
+    $url = '?page=system_settings' . ($tab ? '#tab-' . $tab : '');
+    header('Location: ' . $url);
+    exit;
+}
+
+// Ensure user_id column exists in advisers_accounts (MySQL 5.7 safe)
+$_col_chk = $conn->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='dranhswin' AND TABLE_NAME='advisers_accounts' AND COLUMN_NAME='user_id'");
+if ($_col_chk && $_col_chk->num_rows === 0) {
+    $conn->query("ALTER TABLE advisers_accounts ADD COLUMN user_id INT NULL");
+}
+
 $theme_dir = __DIR__ . '/../uploads/theme/';
 if (!is_dir($theme_dir)) mkdir($theme_dir, 0755, true);
 
@@ -65,8 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $key = 'enrollment_status'; $stmt->execute();
 
             $stmt->close();
-            $toast_message = 'Main settings updated successfully!';
-            $toast_type = 'success';
+            ss_redirect('Main settings updated successfully!', 'success', 'main-settings');
         } 
         elseif ($_POST['action'] === 'assign_room') {
             $section_id = intval($_POST['section_id']);
@@ -92,8 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->execute();
             $stmt->close();
 
-            $toast_message = 'Room successfully assigned!';
-            $toast_type = 'success';
+            ss_redirect('Room successfully assigned!', 'success', 'room-assignment');
         }
         elseif ($_POST['action'] === 'save_curriculum') {
             $vis = isset($_POST['cv']) ? $_POST['cv'] : [];
@@ -127,8 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $stmt->close();
             
-            $toast_message = 'Curriculum Matrix updated!';
-            $toast_type = 'success';
+            ss_redirect('Curriculum Matrix updated!', 'success', 'curriculum');
         }
         elseif ($_POST['action'] === 'add_registry') {
             $cat = $_POST['category'];

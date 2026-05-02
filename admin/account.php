@@ -10,6 +10,12 @@ $db_pass = '';
 $db_name = 'dranhswin';
 $conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
 
+// Ensure user_id column exists in advisers_accounts (MySQL 5.7 safe)
+$_col_chk = $conn->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='dranhswin' AND TABLE_NAME='advisers_accounts' AND COLUMN_NAME='user_id'");
+if ($_col_chk && $_col_chk->num_rows === 0) {
+    $conn->query("ALTER TABLE advisers_accounts ADD COLUMN user_id INT NULL");
+}
+
 $toast_message = '';
 $toast_type = 'success';
 
