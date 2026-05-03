@@ -33,6 +33,10 @@ if ($conn->connect_error) {
                 $lrn_val = $stu['lrn'] ?? $sid;
                 $fname = 'pic_' . $lrn_val . '.' . $ext;
                 $fpath = __DIR__ . '/../uploads/id_photos/' . $fname;
+                // Delete old photo with different extension
+                foreach (glob(__DIR__ . '/../uploads/id_photos/pic_' . $lrn_val . '.*') as $old) {
+                    if ($old !== $fpath) @unlink($old);
+                }
                 if (move_uploaded_file($_FILES['id_photo_file']['tmp_name'], $fpath)) {
                     $photo_path = 'uploads/id_photos/' . $fname;
                 }

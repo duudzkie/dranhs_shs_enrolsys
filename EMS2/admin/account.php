@@ -308,8 +308,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             mkdir($uploadDir, 0755, true);
                         }
 
+                        // Delete old avatar file before saving new one
+                        $oldAvatar = $conn->prepare("SELECT avatar FROM advisers_accounts WHERE id = ?");
+                        if ($oldAvatar) {
+                            $oldAvatar->bind_param('i', $advId);
+                            $oldAvatar->execute();
+                            $oldRow = $oldAvatar->get_result()->fetch_assoc();
+                            $oldAvatar->close();
+                            if (!empty($oldRow['avatar'])) {
+                                $oldPath = __DIR__ . '/../' . $oldRow['avatar'];
+                                if (file_exists($oldPath)) @unlink($oldPath);
+                            }
+                        }
+
                         $fileExt = pathinfo($file['name'], PATHINFO_EXTENSION);
-                        $newFileName = 'adviser_' . $advId . '_' . time() . '.' . $fileExt;
+                        $newFileName = 'adviser_' . $advId . '.' . $fileExt; // fixed name, no timestamp
                         $filePath = $uploadDir . $newFileName;
                         $relativePath = 'uploads/advisers/' . $newFileName;
 

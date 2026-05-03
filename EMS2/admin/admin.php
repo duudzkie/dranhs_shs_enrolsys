@@ -6,6 +6,18 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['logged_in']) || $_SESSION[
     exit;
 }
 
+// ── Auto session timeout: 5 minutes of inactivity ────────────────────────────
+define('SESSION_TIMEOUT', 300); // 5 minutes in seconds
+if (isset($_SESSION['_last_activity'])) {
+    if (time() - $_SESSION['_last_activity'] > SESSION_TIMEOUT) {
+        session_unset();
+        session_destroy();
+        header('Location: ../login.php?timeout=1');
+        exit;
+    }
+}
+$_SESSION['_last_activity'] = time();
+
 // Validate session against DB (prevents stale sessions)
 $_sv_conn = new mysqli('localhost', 'root', '', 'dranhswin');
 $_admin_school_logo = null;
@@ -308,6 +320,62 @@ $inactiveClasses = 'text-slate-300 hover:bg-slate-800 hover:text-white';
         if(overlay) {
             overlay.addEventListener('click', toggleSidebar);
         }
+    </script>
+
+    <!-- ── Session Timeout Warning ── -->
+    <div id="session-timeout-modal" class="fixed inset-0 z-[9999] hidden items-center justify-center" style="background:rgba(15,23,42,0.75);backdrop-filter:blur(4px);">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center">
+            <div class="w-14 h-14 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4">
+                <svg class="w-7 h-7 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+            </div>
+            <h3 class="font-heading font-black text-lg text-slate-800 mb-1">Session Expiring</h3>
+            <p class="text-sm text-slate-500 mb-4">You will be logged out in <span id="timeout-countdown" class="font-black text-amber-600">30</span> seconds due to inactivity.</p>
+            <div class="flex gap-3">
+                <button onclick="resetSessionTimer()" class="flex-1 px-4 py-2.5 rounded-xl bg-dranhs-green text-white text-sm font-bold hover:bg-emerald-700 transition-colors">Stay Logged In</button>
+                <a href="../logout.php" class="flex-1 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 text-sm font-bold hover:bg-slate-200 transition-colors text-center">Logout Now</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    // Session timeout: 5 min (300s) inactivity → warn at 4:30 (270s), logout at 5:00 (300s)
+    const SESSION_TIMEOUT_MS  = 300 * 1000; // 5 minutes
+    const WARN_BEFORE_MS      = 30 * 1000;  // warn 30s before
+    let _sessionTimer, _countdownTimer, _countdownVal = 30;
+    const _modal = document.getElementById('session-timeout-modal');
+    const _countEl = document.getElementById('timeout-countdown');
+
+    function resetSessionTimer() {
+        clearTimeout(_sessionTimer);
+        clearInterval(_countdownTimer);
+        _modal.classList.add('hidden');
+        _modal.classList.remove('flex');
+        _countdownVal = 30;
+        if (_countEl) _countEl.textContent = '30';
+        _sessionTimer = setTimeout(showTimeoutWarning, SESSION_TIMEOUT_MS - WARN_BEFORE_MS);
+    }
+
+    function showTimeoutWarning() {
+        _countdownVal = 30;
+        _modal.classList.remove('hidden');
+        _modal.classList.add('flex');
+        _countdownTimer = setInterval(() => {
+            _countdownVal--;
+            if (_countEl) _countEl.textContent = _countdownVal;
+            if (_countdownVal <= 0) {
+                clearInterval(_countdownTimer);
+                window.location.href = '../logout.php?timeout=1';
+            }
+        }, 1000);
+    }
+
+    // Reset timer on any user activity
+    ['mousemove','keydown','click','scroll','touchstart'].forEach(evt => {
+        document.addEventListener(evt, resetSessionTimer, { passive: true });
+    });
+
+    // Start the timer
+    resetSessionTimer();
     </script>
 </body>
 </html>
