@@ -60,7 +60,37 @@
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" stroke-width="2.5"/><line x1="21" y1="21" x2="16.65" y2="16.65" stroke-width="2.5"/></svg>
                     Search
                 </button>
+                <!-- QR Scan button -->
+                <button id="cs-qr-btn" title="Scan QR Code"
+                    class="px-3 py-3 rounded-xl bg-slate-100 text-slate-600 text-sm font-bold hover:bg-slate-200 transition-colors shrink-0 flex items-center gap-1.5">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                        <rect x="3" y="14" width="7" height="7" rx="1"/>
+                        <path d="M14 14h2v2h-2zm4 0h3v3h-3zm0 4h-3v3h3zm-4 0h2v3h-2z"/>
+                    </svg>
+                </button>
             </div>
+
+            <!-- QR Scanner area (hidden by default) -->
+            <div id="cs-qr-area" class="hidden mt-3">
+                <div class="relative rounded-xl overflow-hidden border-2 border-dranhs-green/40 bg-black" style="height:220px;">
+                    <div id="cs-qr-reader" class="w-full h-full"></div>
+                    <!-- Scan frame overlay -->
+                    <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div class="w-40 h-40 border-2 border-dranhs-green rounded-xl relative">
+                            <span class="absolute top-0 left-0 w-5 h-5 border-t-4 border-l-4 border-dranhs-green rounded-tl-lg"></span>
+                            <span class="absolute top-0 right-0 w-5 h-5 border-t-4 border-r-4 border-dranhs-green rounded-tr-lg"></span>
+                            <span class="absolute bottom-0 left-0 w-5 h-5 border-b-4 border-l-4 border-dranhs-green rounded-bl-lg"></span>
+                            <span class="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-dranhs-green rounded-br-lg"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between mt-2">
+                    <p class="text-xs text-slate-400 font-semibold">Point camera at the QR code on the student ID</p>
+                    <button id="cs-qr-stop" class="text-xs font-bold text-red-500 hover:text-red-700">Stop Scanner</button>
+                </div>
+            </div>
+
             <div id="cs-error" class="hidden mt-2 text-xs text-red-600 font-semibold px-1"></div>
         </div>
 
@@ -301,9 +331,6 @@
     }
 
     openBtn.addEventListener('click', openModal);
-    closeBtn.addEventListener('click', closeModal);
-    closeBot.addEventListener('click', closeModal);
-    modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
     input.addEventListener('keydown', function (e) { if (e.key === 'Enter') doSearch(); });
     searchBtn.addEventListener('click', doSearch);
 
@@ -424,6 +451,82 @@
             noGc.classList.remove('hidden');
         }
     }
+
+    // ── QR Scanner ────────────────────────────────────────────────────────────
+    let _qrScanner = null;
+    const qrBtn    = document.getElementById('cs-qr-btn');
+    const qrArea   = document.getElementById('cs-qr-area');
+    const qrStop   = document.getElementById('cs-qr-stop');
+
+    function stopQrScanner() {
+        if (_qrScanner) {
+            _qrScanner.stop().catch(() => {});
+            _qrScanner.clear();
+            _qrScanner = null;
+        }
+        qrArea.classList.add('hidden');
+        qrBtn.classList.remove('bg-dranhs-green', 'text-white');
+        qrBtn.classList.add('bg-slate-100', 'text-slate-600');
+    }
+
+    qrBtn.addEventListener('click', function () {
+        if (!qrArea.classList.contains('hidden')) {
+            stopQrScanner();
+            return;
+        }
+
+        // Load html5-qrcode library on demand
+        if (!window.Html5Qrcode) {
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+            script.onload = startQrScanner;
+            document.head.appendChild(script);
+        } else {
+            startQrScanner();
+        }
+
+        qrArea.classList.remove('hidden');
+        qrBtn.classList.remove('bg-slate-100', 'text-slate-600');
+        qrBtn.classList.add('bg-dranhs-green', 'text-white');
+    });
+
+    qrStop.addEventListener('click', stopQrScanner);
+
+    function startQrScanner() {
+        if (_qrScanner) return;
+        _qrScanner = new Html5Qrcode('cs-qr-reader');
+        _qrScanner.start(
+            { facingMode: 'environment' },
+            { fps: 10, qrbox: { width: 200, height: 200 } },
+            (decodedText) => {
+                // Extract LRN from QR data format: "LRN:123456789012|NAME:...|SY:...|..."
+                // Only reads the LRN field, ignores all other data
+                const lrnMatch = decodedText.match(/(?:^|[|,])LRN:(\d{10,12})(?:[|,]|$)/);
+                let lrn = lrnMatch ? lrnMatch[1] : decodedText.replace(/\D/g, '');
+                lrn = lrn.replace(/\D/g, '');
+                if (lrn.length >= 10) {
+                    stopQrScanner();
+                    document.getElementById('cs-lrn-input').value = lrn;
+                    doSearch();
+                }
+            },
+            () => {} // ignore scan errors
+        ).catch(err => {
+            errorDiv.innerHTML = 'Camera access denied or not available.';
+            errorDiv.classList.remove('hidden');
+            stopQrScanner();
+        });
+    }
+
+    // Stop scanner when modal closes
+    const _origClose = closeModal;
+    function closeModal() {
+        stopQrScanner();
+        _origClose();
+    }
+    closeBtn.addEventListener('click', closeModal);
+    closeBot.addEventListener('click', closeModal);
+    modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
 })();
 
 // ── Room Locator ──────────────────────────────────────────────────────────────
