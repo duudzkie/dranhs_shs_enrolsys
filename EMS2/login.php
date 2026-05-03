@@ -1,9 +1,25 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
-// If the user is already logged in, redirect to the admin dashboard
-if (isset($_SESSION['user_id'])) {
-    header('Location: admin/admin.php');
-    exit;
+
+// Only auto-redirect if session is fully valid
+if (isset($_SESSION['user_id']) && isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
+    // Verify user still exists in DB before redirecting
+    $conn = new mysqli('localhost', 'root', '', 'dranhswin');
+    if (!$conn->connect_error) {
+        $chk = $conn->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
+        $chk->bind_param("i", $_SESSION['user_id']);
+        $chk->execute();
+        $valid = $chk->get_result()->num_rows > 0;
+        $chk->close();
+        $conn->close();
+        if ($valid) {
+            header('Location: admin/admin.php');
+            exit;
+        }
+    }
+    // Invalid session — destroy and continue to login form
+    session_destroy();
+    session_start();
 }
 
 $error = '';
