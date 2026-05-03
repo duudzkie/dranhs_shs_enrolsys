@@ -61,14 +61,17 @@ $_nav_division = !empty($_nav_theme['division_logo'])  ? $_nav_theme['division_l
                 <button type="submit" class="flex-1 lg:flex-none bg-dranhs-green hover:bg-emerald-700 text-white border-none px-4 py-2 rounded-full font-bold text-sm cursor-pointer transition-transform shadow-md hover:-translate-y-0.5 whitespace-nowrap text-center">LOGIN</button>
             </form>
 
-            <?php if (isset($_GET['auth_error'])): ?>
+            <?php if (isset($_GET['auth_error']) || isset($_GET['timeout'])): ?>
             <div id="nav-login-error" class="absolute top-full right-0 mt-2 z-50 flex items-center gap-2 bg-red-50 dark:bg-red-900/80 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-300 text-xs font-bold px-4 py-2.5 rounded-xl shadow-lg whitespace-nowrap">
                 <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
                 <?php
-                $err_code = $_GET['auth_error'] ?? '';
-                echo $err_code === 'user' ? 'Username not found.' : 'Incorrect password.';
+                if (isset($_GET['timeout'])) {
+                    echo 'Session expired due to inactivity. Please log in again.';
+                } else {
+                    $err_code = $_GET['auth_error'] ?? '';
+                    echo $err_code === 'user' ? 'Username not found.' : 'Incorrect password.';
+                }
                 ?>
-                <!-- Arrow pointing up -->
                 <span class="absolute -top-1.5 right-6 w-3 h-3 bg-red-50 dark:bg-red-900/80 border-l border-t border-red-200 dark:border-red-700 rotate-45"></span>
             </div>
             <script>

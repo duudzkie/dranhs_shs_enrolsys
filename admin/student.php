@@ -67,6 +67,10 @@ if ($conn->connect_error) {
                 if (!in_array($ext, ['jpg','jpeg','png','webp'])) $ext = 'jpg';
                 $fname = 'pic_' . ($lrn_for_photo ?: $student_id) . '.' . $ext;
                 $fpath = __DIR__ . '/../uploads/id_photos/' . $fname;
+                // Delete any existing photo for this LRN (different extension)
+                foreach (glob(__DIR__ . '/../uploads/id_photos/pic_' . ($lrn_for_photo ?: $student_id) . '.*') as $old) {
+                    if ($old !== $fpath) @unlink($old);
+                }
                 if (move_uploaded_file($_FILES['id_photo_file']['tmp_name'], $fpath)) {
                     $photo_rel = 'uploads/id_photos/' . $fname;
                     // Upsert encodings photo
