@@ -18,20 +18,26 @@ $_nav_division = !empty($_nav_theme['division_logo'])  ? $_nav_theme['division_l
 
 <!-- Top Navbar (components/navbar.php) -->
 <nav class="w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800 py-3 px-4 lg:px-8 z-40 flex flex-col lg:flex-row justify-between items-center gap-3 lg:gap-0 fixed top-0 left-0 shadow-sm transition-colors duration-300">
-    <a href="index.php" class="flex items-center gap-4 w-full justify-start lg:w-auto hover:opacity-80 transition-opacity">
-        <div class="w-10 h-10 lg:w-12 lg:h-12 rounded-full border border-slate-200 dark:border-slate-700 flex justify-center items-center overflow-hidden relative shadow-sm bg-white dark:bg-slate-800 shrink-0">
-            <?php if ($_nav_logo): ?>
-                <img src="<?php echo htmlspecialchars($_nav_logo); ?>" alt="School Logo" class="w-full h-full object-contain z-20" />
-            <?php else: ?>
-                <img src="https://ui-avatars.com/api/?name=DR&background=009b5a&color=fff&size=128" alt="School Logo" class="w-full h-full object-cover z-20" />
-            <?php endif; ?>
-        </div>
-        
-        <div class="flex flex-col">
-            <span class="text-[1.1rem] lg:text-xl font-black text-dranhs-dark dark:text-white tracking-tight leading-none uppercase">DRANHS SMARTENROLL</span>
-            <span class="text-[0.65rem] lg:text-xs font-black text-dranhs-green dark:text-emerald-400 uppercase mt-1 tracking-wider">Matina Crossing, Davao City</span>
-        </div>
-    </a>
+    <div class="flex items-center gap-0">
+        <a href="../main_portal.php" class="inline-flex items-center gap-2 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-dranhs-green hover:text-white hover:border-dranhs-green text-slate-500 dark:text-slate-400 transition-all shrink-0 py-2 px-3" title="Back to DRANHS Page">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+            <span class="text-[0.72rem] font-semibold uppercase tracking-wide">Back to DRANHS Page</span>
+        </a>
+
+        <a href="index.php" class="flex items-center gap-4 w-full justify-start lg:w-auto hover:opacity-80 transition-opacity">
+            <div class="w-10 h-10 lg:w-12 lg:h-12 rounded-full border border-slate-200 dark:border-slate-700 flex justify-center items-center overflow-hidden relative shadow-sm bg-white dark:bg-slate-800 shrink-0">
+                <?php if ($_nav_logo): ?>
+                    <img src="<?php echo htmlspecialchars($_nav_logo); ?>" alt="School Logo" class="w-full h-full object-contain z-20" />
+                <?php else: ?>
+                    <img src="https://ui-avatars.com/api/?name=DR&background=009b5a&color=fff&size=128" alt="School Logo" class="w-full h-full object-cover z-20" />
+                <?php endif; ?>
+            </div>
+            
+            <div class="flex flex-col">
+                <span class="text-[1.1rem] lg:text-xl font-black text-dranhs-dark dark:text-white tracking-tight leading-none uppercase">DRANHS SMARTENROLL</span>
+            </div>
+        </a>
+    </div>
     
     <div class="hidden lg:flex items-center justify-center w-full lg:w-auto gap-4 lg:gap-6 mt-1 lg:mt-0">
         <!-- Dark Mode Toggle -->

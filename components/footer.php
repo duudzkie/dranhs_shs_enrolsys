@@ -44,29 +44,34 @@
                 <h2 class="font-heading font-black text-lg text-dranhs-dark tracking-tight">RECORD LOOKUP</h2>
                 <p class="text-xs text-slate-400 font-semibold uppercase tracking-widest">Enrollment Status Tracking</p>
             </div>
-            <button id="check-status-close" class="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors text-lg font-bold">&times;</button>
         </div>
 
         <!-- Search Input -->
         <div class="px-6 pt-5 pb-4">
             <div class="flex gap-2">
-                <div class="relative flex-1">
-                    <input type="text" id="cs-lrn-input" maxlength="12" placeholder="Enter your LRN (12 digits)"
-                        class="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:border-dranhs-green focus:ring-2 focus:ring-dranhs-green/20 outline-none transition-all placeholder-slate-400"
-                        inputmode="numeric" pattern="\d*">
+                <!-- Text search group (hidden when QR is active) -->
+                <div id="cs-text-search" class="flex gap-2 flex-1">
+                    <div class="relative flex-1">
+                        <input type="text" id="cs-lrn-input" maxlength="12" placeholder="Enter your LRN (12 digits)"
+                            class="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-semibold text-slate-800 focus:border-dranhs-green focus:ring-2 focus:ring-dranhs-green/20 outline-none transition-all placeholder-slate-400"
+                            inputmode="numeric" pattern="\d*">
+                    </div>
+                    <button id="cs-search-btn"
+                        class="px-5 py-3 rounded-xl bg-dranhs-green text-white text-sm font-bold hover:bg-emerald-700 transition-colors shrink-0 flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" stroke-width="2.5"/><line x1="21" y1="21" x2="16.65" y2="16.65" stroke-width="2.5"/></svg>
+                        Search
+                    </button>
                 </div>
-                <button id="cs-search-btn"
-                    class="px-5 py-3 rounded-xl bg-dranhs-green text-white text-sm font-bold hover:bg-emerald-700 transition-colors shrink-0 flex items-center gap-2">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" stroke-width="2.5"/><line x1="21" y1="21" x2="16.65" y2="16.65" stroke-width="2.5"/></svg>
-                    Search
-                </button>
-                <!-- QR Scan button -->
+                <!-- QR Scan toggle button (always visible) -->
                 <button id="cs-qr-btn" title="Scan QR Code"
                     class="px-3 py-3 rounded-xl bg-slate-100 text-slate-600 text-sm font-bold hover:bg-slate-200 transition-colors shrink-0 flex items-center gap-1.5">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                    <svg id="cs-qr-icon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                         <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
                         <rect x="3" y="14" width="7" height="7" rx="1"/>
                         <path d="M14 14h2v2h-2zm4 0h3v3h-3zm0 4h-3v3h3zm-4 0h2v3h-2z"/>
+                    </svg>
+                    <svg id="cs-text-icon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 10h11M3 6h7m0 8l4-4m0 0l4 4m-4-4v12"/>
                     </svg>
                 </button>
             </div>
@@ -304,25 +309,38 @@
 
 <script>
 (function () {
-    const modal     = document.getElementById('check-status-modal');    const openBtn   = document.getElementById('check-status-btn');
-    const closeBtn  = document.getElementById('check-status-close');
-    const closeBot  = document.getElementById('cs-close-bottom');
-    const input     = document.getElementById('cs-lrn-input');
-    const searchBtn = document.getElementById('cs-search-btn');
-    const errorDiv  = document.getElementById('cs-error');
-    const resultDiv = document.getElementById('cs-result');
-    const loadDiv   = document.getElementById('cs-loading');
+    const modal       = document.getElementById('check-status-modal');
+    const openBtn     = document.getElementById('check-status-btn');
+    const closeBot    = document.getElementById('cs-close-bottom');
+    const input       = document.getElementById('cs-lrn-input');
+    const searchBtn   = document.getElementById('cs-search-btn');
+    const errorDiv    = document.getElementById('cs-error');
+    const resultDiv   = document.getElementById('cs-result');
+    const loadDiv     = document.getElementById('cs-loading');
+    const qrBtn       = document.getElementById('cs-qr-btn');
+    const qrArea      = document.getElementById('cs-qr-area');
+    const qrStop      = document.getElementById('cs-qr-stop');
+    const textSearch  = document.getElementById('cs-text-search');
+    const qrIcon      = document.getElementById('cs-qr-icon');
+    const textIcon    = document.getElementById('cs-text-icon');
+    let _qrScanner    = null;
+    let _qrMode       = false;
 
+    // ── Open / Close ──────────────────────────────────────────────────────────
     function openModal() {
         modal.classList.remove('hidden');
         modal.classList.add('flex');
-        input.focus();
+        if (!_qrMode) input.focus();
     }
+
     function closeModal() {
+        stopQrScanner();
+        switchToTextMode();
         modal.classList.add('hidden');
         modal.classList.remove('flex');
         resetState();
     }
+
     function resetState() {
         input.value = '';
         errorDiv.classList.add('hidden');
@@ -331,9 +349,12 @@
     }
 
     openBtn.addEventListener('click', openModal);
+    closeBot.addEventListener('click', closeModal);
+    modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
     input.addEventListener('keydown', function (e) { if (e.key === 'Enter') doSearch(); });
     searchBtn.addEventListener('click', doSearch);
 
+    // ── Search ────────────────────────────────────────────────────────────────
     function doSearch() {
         const lrn = input.value.trim().replace(/\D/g, '');
         errorDiv.classList.add('hidden');
@@ -353,13 +374,11 @@
             .then(data => {
                 loadDiv.classList.add('hidden');
                 searchBtn.disabled = false;
-
                 if (!data.found) {
                     errorDiv.innerHTML = data.message || 'No record found.';
                     errorDiv.classList.remove('hidden');
                     return;
                 }
-
                 populateResult(data);
                 resultDiv.classList.remove('hidden');
             })
@@ -371,8 +390,8 @@
             });
     }
 
+    // ── Populate result ───────────────────────────────────────────────────────
     function populateResult(d) {
-        // Photo
         const photo = document.getElementById('cs-photo');
         if (d.photo_path) {
             photo.src = d.photo_path;
@@ -386,7 +405,6 @@
         document.getElementById('cs-name').textContent = d.full_name;
         document.getElementById('cs-lrn-badge').textContent = d.lrn;
         document.getElementById('cs-sy-badge').textContent = 'S.Y. ' + d.school_year;
-        // Career Pathway for G11, Strand for G12
         const pathwayLabel = d.grade_level === 'Grade 11' ? 'Career Pathway' : 'Strand';
         document.getElementById('cs-pathway-label').textContent = pathwayLabel;
         document.getElementById('cs-pathway').textContent = d.pathway || d.track || '--';
@@ -394,7 +412,6 @@
         document.getElementById('cs-section').textContent = d.section || '--';
         document.getElementById('cs-adviser').textContent = d.adviser || '--';
 
-        // Status badge
         const badge = document.getElementById('cs-status-badge');
         const statusColors = {
             'enrolled':       'bg-emerald-100 text-emerald-700',
@@ -405,24 +422,12 @@
         badge.className = 'px-3 py-1 rounded-full text-xs font-black uppercase tracking-wide ' + (statusColors[d.status] || 'bg-slate-100 text-slate-600');
         badge.textContent = d.status_label;
 
-        // Step mapping (3 steps):
-        // 1 = Registration (for_evaluation — just submitted)
-        // 2 = Review       (for_encoding — passed evaluation)
-        // 3 = Enrolled     (enrolled — fully enrolled)
-        const statusStepMap = {
-            'for_evaluation': 1,
-            'for_encoding':   2,
-            'enrolled':       3,
-            'withdrawn':      1,
-        };
+        const statusStepMap = { 'for_evaluation': 1, 'for_encoding': 2, 'enrolled': 3, 'withdrawn': 1 };
         const step = statusStepMap[d.status] || 1;
-
         const circles = document.querySelectorAll('.cs-step-circle');
         const labels  = document.querySelectorAll('.cs-step-label');
-
         circles.forEach((c, i) => {
-            const circleStep = i + 1;
-            if (circleStep <= step) {
+            if (i + 1 <= step) {
                 c.classList.remove('border-slate-200', 'bg-white', 'text-slate-300', 'border-dranhs-green');
                 c.classList.add('border-dranhs-green', 'bg-dranhs-green', 'text-white');
                 labels[i].classList.remove('text-slate-400');
@@ -434,14 +439,11 @@
                 labels[i].classList.add('text-slate-400');
             }
         });
-
-        // Progress line — 0%, 50%, 100%
         const pct = step <= 1 ? 0 : Math.round(((step - 1) / 2) * 100);
         document.getElementById('cs-progress-line').style.width = pct + '%';
 
-        // Group chat button
-        const gcBtn  = document.getElementById('cs-gc-btn');
-        const noGc   = document.getElementById('cs-no-gc');
+        const gcBtn = document.getElementById('cs-gc-btn');
+        const noGc  = document.getElementById('cs-no-gc');
         if (d.group_chat_url) {
             gcBtn.href = d.group_chat_url;
             gcBtn.classList.remove('hidden');
@@ -453,44 +455,77 @@
     }
 
     // ── QR Scanner ────────────────────────────────────────────────────────────
-    let _qrScanner = null;
-    const qrBtn    = document.getElementById('cs-qr-btn');
-    const qrArea   = document.getElementById('cs-qr-area');
-    const qrStop   = document.getElementById('cs-qr-stop');
+    function switchToTextMode() {
+        _qrMode = false;
+        if (textSearch) textSearch.classList.remove('hidden');
+        if (qrArea) qrArea.classList.add('hidden');
+        if (qrIcon) { qrIcon.classList.remove('hidden'); textIcon.classList.add('hidden'); }
+        if (qrBtn) {
+            qrBtn.classList.remove('bg-dranhs-green', 'text-white', 'w-full', 'justify-center');
+            qrBtn.classList.add('bg-slate-100', 'text-slate-600');
+            qrBtn.title = 'Scan QR Code';
+        }
+    }
+
+    function switchToQrMode() {
+        _qrMode = true;
+        if (textSearch) textSearch.classList.add('hidden');
+        if (qrArea) qrArea.classList.remove('hidden');
+        if (qrIcon) { qrIcon.classList.add('hidden'); textIcon.classList.remove('hidden'); }
+        if (qrBtn) {
+            qrBtn.classList.remove('bg-slate-100', 'text-slate-600');
+            qrBtn.classList.add('bg-dranhs-green', 'text-white', 'w-full', 'justify-center');
+            qrBtn.title = 'Switch to text search';
+        }
+    }
 
     function stopQrScanner() {
         if (_qrScanner) {
-            _qrScanner.stop().catch(() => {});
-            _qrScanner.clear();
-            _qrScanner = null;
+            let scannerToStop = _qrScanner;
+            _qrScanner = null; // Prevent re-entry and synchronous UI blocks
+            try {
+                let p = scannerToStop.stop();
+                if (p && typeof p.then === 'function') {
+                    p.then(() => {
+                        try { scannerToStop.clear(); } catch(e){}
+                    }).catch(() => {
+                        try { scannerToStop.clear(); } catch(e){}
+                    });
+                } else {
+                    try { scannerToStop.clear(); } catch(e){}
+                }
+            } catch(err) {
+                try { scannerToStop.clear(); } catch(e){}
+            }
         }
-        qrArea.classList.add('hidden');
-        qrBtn.classList.remove('bg-dranhs-green', 'text-white');
-        qrBtn.classList.add('bg-slate-100', 'text-slate-600');
     }
 
-    qrBtn.addEventListener('click', function () {
-        if (!qrArea.classList.contains('hidden')) {
-            stopQrScanner();
-            return;
-        }
+    if (qrBtn) {
+        qrBtn.addEventListener('click', function () {
+            if (_qrMode) {
+                stopQrScanner();
+                switchToTextMode();
+                input.focus();
+                return;
+            }
+            switchToQrMode();
 
-        // Load html5-qrcode library on demand
-        if (!window.Html5Qrcode) {
-            const script = document.createElement('script');
-            script.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
-            script.onload = startQrScanner;
-            document.head.appendChild(script);
-        } else {
-            startQrScanner();
-        }
+            if (!window.Html5Qrcode) {
+                const script = document.createElement('script');
+                script.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+                script.onload = startQrScanner;
+                document.head.appendChild(script);
+            } else {
+                startQrScanner();
+            }
+        });
+    }
 
-        qrArea.classList.remove('hidden');
-        qrBtn.classList.remove('bg-slate-100', 'text-slate-600');
-        qrBtn.classList.add('bg-dranhs-green', 'text-white');
+    if (qrStop) qrStop.addEventListener('click', function() {
+        stopQrScanner();
+        switchToTextMode();
+        input.focus();
     });
-
-    qrStop.addEventListener('click', stopQrScanner);
 
     function startQrScanner() {
         if (_qrScanner) return;
@@ -499,34 +534,24 @@
             { facingMode: 'environment' },
             { fps: 10, qrbox: { width: 200, height: 200 } },
             (decodedText) => {
-                // Extract LRN from QR data format: "LRN:123456789012|NAME:...|SY:...|..."
-                // Only reads the LRN field, ignores all other data
+                // Extract only LRN from multi-field QR: "LRN:123456789012|NAME:...|SY:...|..."
                 const lrnMatch = decodedText.match(/(?:^|[|,])LRN:(\d{10,12})(?:[|,]|$)/);
                 let lrn = lrnMatch ? lrnMatch[1] : decodedText.replace(/\D/g, '');
                 lrn = lrn.replace(/\D/g, '');
                 if (lrn.length >= 10) {
                     stopQrScanner();
-                    document.getElementById('cs-lrn-input').value = lrn;
+                    switchToTextMode();
+                    input.value = lrn;
                     doSearch();
                 }
             },
-            () => {} // ignore scan errors
-        ).catch(err => {
+            () => {}
+        ).catch(() => {
             errorDiv.innerHTML = 'Camera access denied or not available.';
             errorDiv.classList.remove('hidden');
             stopQrScanner();
         });
     }
-
-    // Stop scanner when modal closes
-    const _origClose = closeModal;
-    function closeModal() {
-        stopQrScanner();
-        _origClose();
-    }
-    closeBtn.addEventListener('click', closeModal);
-    closeBot.addEventListener('click', closeModal);
-    modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
 })();
 
 // ── Room Locator ──────────────────────────────────────────────────────────────
