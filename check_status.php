@@ -7,6 +7,7 @@
 
 header('Content-Type: application/json');
 header('X-Content-Type-Options: nosniff');
+require_once __DIR__ . '/db.php';
 
 $lrn = trim($_GET['lrn'] ?? '');
 
@@ -16,11 +17,7 @@ if (!preg_match('/^\d{10,12}$/', $lrn)) {
     exit;
 }
 
-$conn = new mysqli('localhost', 'root', '', 'dranhswin');
-if ($conn->connect_error) {
-    echo json_encode(['found' => false, 'message' => 'Service unavailable. Please try again later.']);
-    exit;
-}
+$conn = db_connect();
 
 $stmt = $conn->prepare("
     SELECT

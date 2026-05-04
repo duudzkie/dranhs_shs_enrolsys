@@ -1,9 +1,6 @@
 <?php
-$conn = new mysqli('localhost', 'root', '', 'dranhswin');
-if ($conn->connect_error) {
-    fwrite(STDERR, "Connection failed: " . $conn->connect_error . PHP_EOL);
-    exit(1);
-}
+require_once __DIR__ . '/../db.php';
+$conn = db_connect();
 
 $columns = [];
 $res = $conn->query("SHOW COLUMNS FROM g11_completers");

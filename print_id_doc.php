@@ -17,11 +17,11 @@ if (!$student_id) exit('Invalid student ID.');
 
 require_once __DIR__ . '/vendor/autoload.php';
 require_once __DIR__ . '/pathway_strand_catalog.php';
+require_once __DIR__ . '/db.php';
 
 use PhpOffice\PhpWord\TemplateProcessor;
 
-$conn = new mysqli('localhost', 'root', '', 'dranhswin');
-if ($conn->connect_error) exit('Database error.');
+$conn = db_connect();
 
 $stmt = $conn->prepare("
     SELECT s.*, COALESCE(e.id_photo_path, '') AS _id_photo_path
