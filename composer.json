@@ -1,0 +1,14 @@
+{
+    "name": "dranhs-portal",
+    "description": "DRANHS Portal Website",
+    "type": "project",
+    "require": {
+        "php": ">=7.4"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "prefer-stable": true,
+        "sort-packages": true
+    },
+    "minimum-stability": "stable"
+}
