@@ -1,6 +1,6 @@
 <?php
-$db = new mysqli('localhost', 'root', '', 'dranhswin');
-if ($db->connect_error) die('Connect Error: ' . $db->connect_error);
+require_once __DIR__ . '/../db.php';
+$db = db_connect();
 
 $sql = "CREATE TABLE IF NOT EXISTS students (
     id INT AUTO_INCREMENT PRIMARY KEY,

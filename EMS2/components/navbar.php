@@ -1,12 +1,13 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
+require_once __DIR__ . '/../db.php';
 
 // Load theme settings
 $_nav_logo = null;
-$_nav_conn = @new mysqli('localhost', 'root', '', 'dranhswin');
+$_nav_theme = [];
+$_nav_conn = @new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME, DB_PORT);
 if (!$_nav_conn->connect_error) {
     $_nav_res = $_nav_conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('school_logo','background','deped_logo','division_logo')");
-    $_nav_theme = [];
     if ($_nav_res) { while ($_nr = $_nav_res->fetch_assoc()) $_nav_theme[$_nr['setting_key']] = $_nr['setting_value']; }
     $_nav_conn->close();
 }

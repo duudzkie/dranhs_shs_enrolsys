@@ -1,51 +1,27 @@
 <?php
 /**
  * Database Configuration
- * Auto-detects Railway PostgreSQL or uses MySQL fallback
+ * Uses Railway MySQL variables with local fallbacks.
  */
 
-// Check if we're on Railway with PostgreSQL
-if (!empty($_ENV['DATABASE_URL'])) {
-    // Parse Railway PostgreSQL connection string
-    $db_url = parse_url($_ENV['DATABASE_URL']);
-    
-    define('DB_HOST', $db_url['host'] ?? 'localhost');
-    define('DB_PORT', $db_url['port'] ?? 5432);
-    define('DB_USER', $db_url['user'] ?? 'postgres');
-    define('DB_PASS', $db_url['pass'] ?? '');
-    define('DB_NAME', ltrim($db_url['path'] ?? '/railway', '/'));
-    define('DB_TYPE', 'postgres');
-    
-} else {
-    // Local MySQL fallback
-    define('DB_HOST', $_ENV['DB_HOST'] ?? 'localhost');
-    define('DB_PORT', $_ENV['DB_PORT'] ?? 3306);
-    define('DB_USER', $_ENV['DB_USER'] ?? 'root');
-    define('DB_PASS', $_ENV['DB_PASS'] ?? '');
-    define('DB_NAME', $_ENV['DB_NAME'] ?? 'dranhswin');
-    define('DB_TYPE', 'mysql');
-}
+define('DB_HOST', getenv('MYSQLHOST')     ?: getenv('DB_HOST')     ?: 'localhost');
+define('DB_PORT', (int)(getenv('MYSQLPORT') ?: getenv('DB_PORT')   ?: 3306));
+define('DB_USER', getenv('MYSQLUSER')     ?: getenv('DB_USER')     ?: 'root');
+define('DB_PASS', getenv('MYSQLPASSWORD') ?: getenv('DB_PASS')     ?: '');
+define('DB_NAME', getenv('MYSQLDATABASE') ?: getenv('DB_NAME')     ?: 'dranhswin');
+define('DB_TYPE', 'mysql');
 
 /**
  * Get PDO connection (works with both MySQL and PostgreSQL)
  */
 function getDBConnection() {
     try {
-        if (DB_TYPE === 'postgres') {
-            $dsn = sprintf(
-                'pgsql:host=%s;port=%d;dbname=%s',
-                DB_HOST,
-                DB_PORT,
-                DB_NAME
-            );
-        } else {
-            $dsn = sprintf(
-                'mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4',
-                DB_HOST,
-                DB_PORT,
-                DB_NAME
-            );
-        }
+        $dsn = sprintf(
+            'mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4',
+            DB_HOST,
+            DB_PORT,
+            DB_NAME
+        );
         
         $conn = new PDO($dsn, DB_USER, DB_PASS, [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,

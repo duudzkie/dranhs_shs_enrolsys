@@ -311,6 +311,7 @@
 (function () {
     const modal       = document.getElementById('check-status-modal');
     const openBtn     = document.getElementById('check-status-btn');
+    const closeBtn    = document.getElementById('check-status-close');
     const closeBot    = document.getElementById('cs-close-bottom');
     const input       = document.getElementById('cs-lrn-input');
     const searchBtn   = document.getElementById('cs-search-btn');

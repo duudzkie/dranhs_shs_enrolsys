@@ -1,10 +1,11 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
+require_once __DIR__ . '/db.php';
 
 // Only auto-redirect if session is fully valid
 if (isset($_SESSION['user_id']) && isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
     // Verify user still exists in DB before redirecting
-    $conn = new mysqli('localhost', 'root', '', 'dranhswin');
+    $conn = db_connect();
     if (!$conn->connect_error) {
         $chk = $conn->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
         $chk->bind_param("i", $_SESSION['user_id']);
@@ -24,18 +25,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['logged_in']) && $_SESSION['l
 
 $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    //
-    // DATABASE CONNECTION
-    //
-    $db_host = 'localhost';
-    $db_user = 'root';
-    $db_pass = '';
-    $db_name = 'dranhswin';
-
-    $conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
-    if ($conn->connect_error) {
-        die("Connection failed: " . $conn->connect_error);
-    }
+    $conn = db_connect();
 
     $username = $_POST['username'];
     $password = $_POST['password'];

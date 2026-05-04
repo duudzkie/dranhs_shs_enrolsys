@@ -6,12 +6,9 @@
 
 header('Content-Type: application/json');
 header('X-Content-Type-Options: nosniff');
+require_once __DIR__ . '/db.php';
 
-$conn = new mysqli('localhost', 'root', '', 'dranhswin');
-if ($conn->connect_error) {
-    echo json_encode(['error' => true]);
-    exit;
-}
+$conn = db_connect();
 
 // add_sections.grade_level stores '11'/'12'
 // classrooms.grade_level stores 'Grade 11'/'Grade 12'

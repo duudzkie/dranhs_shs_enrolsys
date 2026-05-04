@@ -6,6 +6,7 @@
  */
 
 session_start();
+require_once __DIR__ . '/db.php';
 if (empty($_SESSION['user_id'])) {
     http_response_code(403);
     exit('Access denied.');
@@ -14,8 +15,7 @@ if (empty($_SESSION['user_id'])) {
 $student_id = (int)($_GET['id'] ?? 0);
 if (!$student_id) exit('Invalid student ID.');
 
-$conn = new mysqli('localhost', 'root', '', 'dranhswin');
-if ($conn->connect_error) exit('Database error.');
+$conn = db_connect();
 
 $stmt = $conn->prepare("
     SELECT s.*, COALESCE(e.id_photo_path, '') AS _id_photo_path

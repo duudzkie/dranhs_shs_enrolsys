@@ -1,11 +1,8 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 
-$db_host = 'localhost';
-$db_user = 'root';
-$db_pass = '';
-$db_name = 'dranhswin';
-$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
+require_once __DIR__ . '/db.php';
+$conn = db_connect();
 
 $enrollment_locked = false;
 $_theme = [];

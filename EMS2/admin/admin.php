@@ -1,5 +1,6 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
+require_once __DIR__ . '/../db.php';
 // Check if user is actually logged in — also verify user still exists in DB
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
     header('Location: ../login.php');
@@ -19,7 +20,7 @@ if (isset($_SESSION['_last_activity'])) {
 $_SESSION['_last_activity'] = time();
 
 // Validate session against DB (prevents stale sessions)
-$_sv_conn = new mysqli('localhost', 'root', '', 'dranhswin');
+$_sv_conn = db_connect();
 $_admin_school_logo = null;
 if (!$_sv_conn->connect_error) {
     $_sv_stmt = $_sv_conn->prepare("SELECT id, role FROM users WHERE id = ? LIMIT 1");

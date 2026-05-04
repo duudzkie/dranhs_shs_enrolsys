@@ -36,7 +36,8 @@ function load_curriculum_structure_config() {
         return $config;
     }
 
-    $conn = @new mysqli('localhost', 'root', '', 'dranhswin');
+    require_once __DIR__ . '/db.php';
+    $conn = @new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME, DB_PORT);
     if ($conn->connect_error) {
         return $config;
     }

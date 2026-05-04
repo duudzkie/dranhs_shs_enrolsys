@@ -5,6 +5,7 @@
  */
 
 session_start();
+require_once __DIR__ . '/db.php';
 if (empty($_SESSION['user_id'])) {
     http_response_code(403);
     exit('Access denied.');
@@ -14,8 +15,7 @@ $section      = trim($_GET['section']      ?? '');
 $classroom_id = (int)($_GET['classroom_id'] ?? 0);
 if (!$section) exit('No section specified.');
 
-$conn = new mysqli('localhost', 'root', '', 'dranhswin');
-if ($conn->connect_error) exit('Database error.');
+$conn = db_connect();
 
 // Fetch classroom info
 $cr = null;

@@ -1,5 +1,8 @@
 # Railway PostgreSQL Setup Guide
 
+> Deprecated for this codebase: the application now standardizes on MySQL (`mysqli`) for Railway deployments.
+> Use a Railway MySQL service and `MYSQLHOST`, `MYSQLUSER`, `MYSQLPASSWORD`, `MYSQLDATABASE`, `MYSQLPORT`.
+
 ## Automatic Setup
 
 1. **Railway will inject `DATABASE_URL`** as an environment variable automatically
