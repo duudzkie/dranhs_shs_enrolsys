@@ -1,6 +1,6 @@
 <?php
-$db_host = 'localhost'; $db_user = 'root'; $db_pass = ''; $db_name = 'dranhswin';
-$list_conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
+require_once __DIR__ . '/../db.php';
+$list_conn = db_connect();
 
 $toast_msg = ''; $toast_type = 'success';
 $stem_rows = []; $g11_rows = []; $watch_rows = [];

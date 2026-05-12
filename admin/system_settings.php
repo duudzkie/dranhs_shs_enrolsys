@@ -11,11 +11,8 @@ if (!is_dir($upload_dir)) {
 }
 
 // Database Connection
-$db_host = 'localhost';
-$db_user = 'root';
-$db_pass = '';
-$db_name = 'dranhswin';
-$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
+require_once __DIR__ . '/../db.php';
+$conn = db_connect();
 
 // ── PRG: read flash message from session ──────────────────────────────────────
 $toast_message = '';
@@ -35,7 +32,7 @@ function ss_redirect($msg, $type = 'success', $tab = '') {
 }
 
 // Ensure user_id column exists in advisers_accounts (MySQL 5.7 safe)
-$_col_chk = $conn->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='dranhswin' AND TABLE_NAME='advisers_accounts' AND COLUMN_NAME='user_id'");
+$_col_chk = $conn->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='" . $conn->real_escape_string(DB_NAME) . "' AND TABLE_NAME='advisers_accounts' AND COLUMN_NAME='user_id'");
 if ($_col_chk && $_col_chk->num_rows === 0) {
     $conn->query("ALTER TABLE advisers_accounts ADD COLUMN user_id INT NULL");
 }

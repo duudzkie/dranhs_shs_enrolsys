@@ -2,10 +2,9 @@
 session_start();
 if (!isset($_SESSION['user_id'])||!isset($_SESSION['logged_in'])||$_SESSION['logged_in']!==true){header('Location:../login.php');exit;}
 require_once __DIR__.'/../pathway_strand_catalog.php';
+require_once __DIR__ . '/../db.php';
 
-$db_host='localhost';$db_user='root';$db_pass='';$db_name='dranhswin';
-$conn=new mysqli($db_host,$db_user,$db_pass,$db_name);
-if($conn->connect_error) die('DB error');
+$conn = db_connect();
 
 $sy_r=$conn->query("SELECT setting_value FROM system_settings WHERE setting_key='academic_year' LIMIT 1");
 $current_sy=($sy_r&&$r=$sy_r->fetch_assoc())?$r['setting_value']:'';

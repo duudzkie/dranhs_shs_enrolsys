@@ -1,14 +1,11 @@
 <?php
 header('Content-Type: application/json');
 require_once __DIR__ . '/../pathway_strand_catalog.php';
+require_once __DIR__ . '/../db.php';
 
-$db_host = 'localhost';
-$db_user = 'root';
-$db_pass = '';
-$db_name = 'dranhswin';
-$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
-
-if ($conn->connect_error) {
+try {
+    $conn = db_connect();
+} catch (Exception $e) {
     http_response_code(500);
     echo json_encode([
         'ok' => false,

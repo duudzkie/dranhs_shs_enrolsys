@@ -1,9 +1,6 @@
 <?php
-$db_host = 'localhost';
-$db_user = 'root';
-$db_pass = '';
-$db_name = 'dranhswin';
-$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
+require_once __DIR__ . '/db.php';
+$conn = db_connect();
 
 $school_year = '2026 - 2027';
 $semester = '1st';
