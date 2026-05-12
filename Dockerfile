@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
     libzip-dev \
     zip \
     unzip \
-    && docker-php-ext-install pdo pdo_mysql pdo_pgsql mbstring exif pcntl bcmath gd zip \
+    && docker-php-ext-install mysqli pdo pdo_mysql mbstring exif pcntl bcmath gd zip \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Enable Apache mod_rewrite
@@ -25,7 +25,7 @@ COPY . /var/www/html/
 
 # Configure Apache VirtualHost to serve DRANHS portal
 RUN cat > /etc/apache2/sites-available/000-default.conf <<'EOF'
-<VirtualHost *:80>
+<VirtualHost *:${PORT}>
     ServerAdmin admin@dranhs.local
     DocumentRoot /var/www/html
 
@@ -52,13 +52,30 @@ RUN cat > /etc/apache2/sites-available/000-default.conf <<'EOF'
 </VirtualHost>
 EOF
 
+# Make Apache listen on $PORT (Railway assigns dynamic port)
+RUN sed -i 's/Listen 80/Listen ${PORT}/' /etc/apache2/ports.conf
+
+# Create startup script that initializes DB then starts Apache
+RUN cat > /usr/local/bin/start.sh <<'SCRIPT'
+#!/bin/bash
+# Auto-initialize database on first boot (safe — uses IF NOT EXISTS)
+if [ -n "$MYSQLHOST" ]; then
+    echo "Railway MySQL detected. Running database setup..."
+    php /var/www/html/setup_db.php || echo "DB setup encountered an issue (may already be initialized)."
+fi
+# Start Apache
+exec apache2-foreground
+SCRIPT
+RUN chmod +x /usr/local/bin/start.sh
+
 # Set permissions
 RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html \
     && chmod -R 775 /var/www/html/EMS2/uploads 2>/dev/null || true
 
-# Expose port 80
+# Default PORT for local Docker (Railway overrides this)
+ENV PORT=80
 EXPOSE 80
 
-# Start Apache
-CMD ["apache2-foreground"]
+# Start via startup script
+CMD ["/usr/local/bin/start.sh"]

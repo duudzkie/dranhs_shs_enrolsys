@@ -1,9 +1,9 @@
 <?php
 if (basename($_SERVER['PHP_SELF']) == basename(__FILE__)) { header('Location: admin.php'); exit; }
 require_once __DIR__ . '/../pathway_strand_catalog.php';
+require_once __DIR__ . '/../db.php';
 
-$db_host='localhost';$db_user='root';$db_pass='';$db_name='dranhswin';
-$dc = new mysqli($db_host,$db_user,$db_pass,$db_name);
+$dc = db_connect();
 $d = ['g11'=>0,'g12'=>0,'male'=>0,'female'=>0,
       'enrolled'=>0,'for_eval'=>0,'for_enc'=>0,'withdrawn'=>0,
       'pathways_m'=>[],'pathways_f'=>[],'strands_m'=>[],'strands_f'=>[],

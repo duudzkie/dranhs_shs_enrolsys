@@ -1,11 +1,8 @@
 <?php
 require_once __DIR__ . '/../pathway_strand_catalog.php';
+require_once __DIR__ . '/../db.php';
 
-$db_host = 'localhost';
-$db_user = 'root';
-$db_pass = '';
-$db_name = 'dranhswin';
-$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
+$conn = db_connect();
 
 $evaluation_rows = [];
 $classroom_rows = [];

@@ -1,8 +1,8 @@
 <?php
 require_once __DIR__ . '/../pathway_strand_catalog.php';
+require_once __DIR__ . '/../db.php';
 
-$db_host = 'localhost'; $db_user = 'root'; $db_pass = ''; $db_name = 'dranhswin';
-$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
+$conn = db_connect();
 
 $classrooms = [];
 $advisers = [];
@@ -29,7 +29,7 @@ if (!$conn->connect_error) {
     $conn->query("ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS adviser_name VARCHAR(150) NULL AFTER adviser_id");
     $conn->query("ALTER TABLE students ADD COLUMN IF NOT EXISTS assigned_section VARCHAR(100)");
     // Add group_chat_url safely — check first to support MySQL 5.7
-    $col_check = $conn->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='dranhswin' AND TABLE_NAME='classrooms' AND COLUMN_NAME='group_chat_url'");
+    $col_check = $conn->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='" . $conn->real_escape_string(DB_NAME) . "' AND TABLE_NAME='classrooms' AND COLUMN_NAME='group_chat_url'");
     if ($col_check && $col_check->num_rows === 0) {
         $conn->query("ALTER TABLE classrooms ADD COLUMN group_chat_url VARCHAR(500) NULL");
     }
@@ -755,7 +755,7 @@ const CR_SECTIONS = {
 const CR_ADVISERS = <?php echo json_encode($advisers, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP); ?>;
 const CR_CLASSROOMS = <?php echo json_encode($classrooms, JSON_HEX_TAG|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_HEX_AMP); ?>;
 const ENROLLED_DATA = <?php
-    $conn2 = new mysqli($db_host, $db_user, $db_pass, $db_name);
+    $conn2 = db_connect();
     $all_enrolled = [];
     if (!$conn2->connect_error) {
         $er = $conn2->query("SELECT students.id, students.last_name, students.first_name, students.middle_name, students.extension_name, students.lrn, students.sex, students.grade_level, students.track, students.pathway_strand, students.assigned_section, students.enrollment_status,

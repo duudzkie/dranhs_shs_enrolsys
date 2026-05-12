@@ -2,16 +2,8 @@
 // process_enrollment.php - Handle enrollment form submission with image upload and compression
 
 require_once __DIR__ . '/pathway_strand_catalog.php';
-
-$db_host = 'localhost';
-$db_user = 'root';
-$db_pass = '';
-$db_name = 'dranhswin';
-$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
-
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
-}
+require_once __DIR__ . '/db.php';
+$conn = db_connect();
 
 function post_value($key, $default = null) {
     return isset($_POST[$key]) ? $_POST[$key] : $default;

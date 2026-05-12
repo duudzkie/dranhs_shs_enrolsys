@@ -1,15 +1,8 @@
 <?php
 // add_lrn_unique_constraint.php - Add unique constraint to LRN column in students table
+require_once __DIR__ . '/../db.php';
 
-$db_host = 'localhost';
-$db_user = 'root';
-$db_pass = '';
-$db_name = 'dranhswin';
-$conn = new mysqli($db_host, $db_user, $db_pass, $db_name);
-
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
-}
+$conn = db_connect();
 
 // Check if unique constraint already exists
 $result = $conn->query("SHOW INDEX FROM students WHERE Column_name = 'lrn' AND Non_unique = 0");

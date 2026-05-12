@@ -28,7 +28,8 @@ A dynamic web portal for Daniel R. Aguinaldo National High School (DRANHS) built
 
 For full functionality, set up MySQL database:
 - Import `EMS2/setup_users.sql`
-- Configure database connection in PHP files
+- Configure Railway environment variables: `MYSQLHOST`, `MYSQLUSER`, `MYSQLPASSWORD`, `MYSQLDATABASE`, `MYSQLPORT`
+- Use the centralized connection helpers in `EMS2/db.php` or `config_db.php` instead of hardcoding credentials in PHP files
 
 ## File Structure
 
