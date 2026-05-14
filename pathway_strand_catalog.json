@@ -1,0 +1,32 @@
+{
+  "grade_11": [
+    { "track": "Academic", "label": "Medical & Allied Health", "code": "med_allied" },
+    { "track": "Academic", "label": "Engineering & Aviation", "code": "eng_avi" },
+    { "track": "Academic", "label": "Earth, Space & Weather Science", "code": "earth_space_weather" },
+    { "track": "Academic", "label": "Pre-Law & Public Governance", "code": "prelaw_pubgov" },
+    { "track": "Academic", "label": "Criminology & Uniformed Services", "code": "crim_uni" },
+    { "track": "Academic", "label": "Teacher Ed (Lang/Social Sci)", "code": "teach_lang_socsci" },
+    { "track": "Academic", "label": "Social Work & Community Dev.", "code": "socwork_commdev" },
+    { "track": "Academic", "label": "Digital Media & Creative Arts", "code": "digimedia_crearts" },
+    { "track": "Academic", "label": "Accountancy & Financial Mgmt.", "code": "acct_finmgmt" },
+    { "track": "Academic", "label": "Entrepreneurship & Innovation", "code": "entrep_innov" },
+    { "track": "Academic", "label": "FITNESS AND ATHLETICS DEVELOPMENT", "code": "fitness_athletics" },
+    { "track": "Tech-Pro", "label": "ICT (Computer Systems Servicing)", "code": "ict_css" },
+    { "track": "Tech-Pro", "label": "Industrial (Electrical Installation)", "code": "indus_eim" },
+    { "track": "Tech-Pro", "label": "Kitchen Operations (Cookery)", "code": "kitchen_cookery" },
+    { "track": "Tech-Pro", "label": "Aesthetic Services (Beauty Care)", "code": "aesthetic_beauty" },
+    { "track": "ALS", "label": "ALS - ICT (Computer Systems Servicing)", "code": "als_ict_css" },
+    { "track": "ALS", "label": "ALS - Kitchen Operations (Cookery)", "code": "als_kitchen_cookery" },
+    { "track": "ALS", "label": "ALS - Food Processing", "code": "als_food_processing" }
+  ],
+  "grade_12": [
+    { "track": "Academic", "label": "ABM", "code": "abm" },
+    { "track": "Academic", "label": "GAS", "code": "gas" },
+    { "track": "Academic", "label": "HUMSS", "code": "humss" },
+    { "track": "Academic", "label": "STEM", "code": "stem" },
+    { "track": "TVL", "label": "CSS", "code": "css" },
+    { "track": "TVL", "label": "EIM", "code": "eim" },
+    { "track": "TVL", "label": "Cookery", "code": "cookery" },
+    { "track": "TVL", "label": "Beauty Care", "code": "beauty_care" }
+  ]
+}

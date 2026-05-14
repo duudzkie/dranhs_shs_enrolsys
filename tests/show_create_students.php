@@ -1,0 +1,7 @@
+<?php
+require_once __DIR__ . '/../db.php';
+$c = mysqli_connect(DB_HOST, DB_USER, DB_PASS, DB_NAME, DB_PORT);
+if(!$c){die('connect fail');}
+$r = mysqli_query($c, 'SHOW CREATE TABLE students');
+$x = mysqli_fetch_assoc($r);
+echo $x['Create Table'];
