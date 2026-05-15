@@ -544,10 +544,11 @@ function getRoomAssignment($roomNumber, $registries) {
                     </div>
                     
                     <div class="flex flex-col gap-2">
-                        <label class="text-sm font-bold text-slate-700 uppercase tracking-widest">Active Semester</label>
+                        <label class="text-sm font-bold text-slate-700 uppercase tracking-widest">Active Term</label>
                         <select name="active_semester" class="w-full bg-white border border-slate-300 px-4 py-3 rounded-lg text-slate-800 font-bold focus:border-dranhs-green focus:ring-2 focus:ring-dranhs-green/20 outline-none">
-                            <option value="1st" <?php echo (($settings['active_semester']??'')=='1st')?'selected':''; ?>>1st Semester</option>
-                            <option value="2nd" <?php echo (($settings['active_semester']??'')=='2nd')?'selected':''; ?>>2nd Semester</option>
+                            <option value="term_1" <?php echo (($settings['active_semester'] ?? '') === 'term_1' || ($settings['active_semester'] ?? '') === '1st') ? 'selected' : ''; ?>>Term 1</option>
+                            <option value="term_2" <?php echo (($settings['active_semester'] ?? '') === 'term_2' || ($settings['active_semester'] ?? '') === '2nd') ? 'selected' : ''; ?>>Term 2</option>
+                            <option value="term_3" <?php echo (($settings['active_semester'] ?? '') === 'term_3') ? 'selected' : ''; ?>>Term 3</option>
                         </select>
                     </div>
                 </div>

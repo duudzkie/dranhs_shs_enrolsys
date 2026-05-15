@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
 -- Default system settings
 INSERT IGNORE INTO system_settings (setting_key, setting_value) VALUES
 ('academic_year', CONCAT(YEAR(CURDATE()), ' - ', YEAR(CURDATE()) + 1)),
-('active_semester', '1st'),
+('active_semester', 'term_1'),
 ('enrollment_status', 'locked'),
 ('phase_start_date', ''),
 ('stem_qualifier_enabled', '1');

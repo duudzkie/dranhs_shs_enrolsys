@@ -363,10 +363,11 @@ function eval_full_name($row) {
                             <option value="Grade 11">Grade 11</option>
                             <option value="Grade 12">Grade 12</option>
                         </select></div>
-                        <div><label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Semester</label>
+                        <div><label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Term</label>
                         <select name="semester" id="ee-semester" class="w-full bg-white border-2 border-slate-300 px-4 py-3 rounded-xl text-sm font-medium focus:border-dranhs-green outline-none">
-                            <option value="1st">1st Semester</option>
-                            <option value="2nd">2nd Semester</option>
+                            <option value="term_1">Term 1</option>
+                            <option value="term_2">Term 2</option>
+                            <option value="term_3">Term 3</option>
                         </select></div>
                         <div><label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">LRN</label>
                         <input type="text" name="lrn" id="ee-lrn" maxlength="12" class="w-full bg-white border-2 border-slate-300 px-4 py-3 rounded-xl text-sm font-medium focus:border-dranhs-green outline-none"></div>
@@ -504,6 +505,20 @@ function evalFullName(s) {
 
 function tod(v) { return (v && String(v).trim()) ? String(v) : '--'; }
 
+function normalizeTermValue(value) {
+    if (value === '1st') return 'term_1';
+    if (value === '2nd') return 'term_2';
+    return value || '';
+}
+
+function formatTermLabel(value) {
+    const normalized = normalizeTermValue(value);
+    if (normalized === 'term_1') return 'Term 1';
+    if (normalized === 'term_2') return 'Term 2';
+    if (normalized === 'term_3') return 'Term 3';
+    return tod(value);
+}
+
 function infoCard(label, value) {
     return `<div class="rounded-xl bg-slate-50 border border-slate-100 p-3">
         <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">${label}</p>
@@ -598,7 +613,7 @@ function openEvalModal(student) {
         infoCard('Track', student.track),
         infoCard('Pathway / Strand', pathwayLabel(student.grade_level, student.pathway_strand)),
         infoCard('Student Type', student.student_type),
-        infoCard('Semester', student.semester),
+        infoCard('Term', formatTermLabel(student.semester)),
         infoCard('School Year', student.school_year),
         infoCard('Filed', student.created_at ? new Date(student.created_at).toLocaleDateString('en-PH', {year:'numeric',month:'short',day:'numeric'}) : '--'),
     ].join('');
@@ -776,7 +791,7 @@ function openFullInfoModal(student) {
             { label: 'Learner Category', value: student.student_type },
             { label: 'School Year',      value: student.school_year },
             { label: 'Grade Level',      value: student.grade_level },
-            { label: 'Semester',         value: student.semester },
+            { label: 'Term',             value: formatTermLabel(student.semester) },
             { label: 'LRN',              value: student.lrn },
             { label: 'Track',            value: student.track },
             { label: 'Pathway / Strand', value: pathwayLabel(student.grade_level, student.pathway_strand) },
@@ -854,11 +869,12 @@ function eeSet(id, val) {
 function eeSetSelect(id, val) {
     const el = document.getElementById(id);
     if (!el) return;
-    el.value = val || '';
-    if (el.value === '' && val) {
+    const normalized = normalizeTermValue(val);
+    el.value = normalized || '';
+    if (el.value === '' && normalized) {
         const opt = document.createElement('option');
-        opt.value = val; opt.textContent = val;
-        el.appendChild(opt); el.value = val;
+        opt.value = normalized; opt.textContent = formatTermLabel(normalized);
+        el.appendChild(opt); el.value = normalized;
     }
 }
 function eeRefreshPathway() {
@@ -890,7 +906,7 @@ function openEvalEditModal(student) {
     eeSetSelect('ee-student-type', student.student_type);
     eeSet('ee-school-year', student.school_year);
     eeSetSelect('ee-grade-level', student.grade_level || 'Grade 11');
-    eeSetSelect('ee-semester', student.semester || '1st');
+    eeSetSelect('ee-semester', student.semester || 'term_1');
     eeSet('ee-lrn', student.lrn);
     eeSetSelect('ee-track', student.track);
     eeRefreshPathway();
