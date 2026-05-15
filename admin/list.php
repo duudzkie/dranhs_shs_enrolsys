@@ -47,6 +47,24 @@ $stem_cluster_selections = [
     '3' => 'earth_space_weather',
 ];
 
+function ensure_table_columns(mysqli $conn, string $table_name, array $columns): void {
+    $safe_table = $conn->real_escape_string($table_name);
+
+    foreach ($columns as $column_name => $definition) {
+        $safe_column = $conn->real_escape_string($column_name);
+        $exists = $conn->query(
+            "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = '" . $conn->real_escape_string(DB_NAME) . "'
+             AND TABLE_NAME = '{$safe_table}'
+             AND COLUMN_NAME = '{$safe_column}'"
+        );
+
+        if ($exists && $exists->num_rows === 0) {
+            $conn->query("ALTER TABLE `{$table_name}` ADD COLUMN `{$column_name}` {$definition}");
+        }
+    }
+}
+
 $csv_templates = [
     'stem' => "last_name,first_name,middle_name,lrn,general_average,pathway_cluster\nDela Cruz,Juan,S,123456789012,95.50,2\n",
     'g11' => "last_name,first_name,middle_name,sex,lrn,section,strand,completer_status\nSantos,Maria,L,Female,123456789012,HYDROGEN,STEM,regular\n",
@@ -146,6 +164,26 @@ function g12_track_from_strand($strand_value) {
 }
 
 if (!$list_conn->connect_error) {
+    ensure_table_columns($list_conn, 'stem_qualifiers', [
+        'last_name' => "VARCHAR(100) NULL AFTER `id`",
+        'first_name' => "VARCHAR(100) NULL AFTER `last_name`",
+        'middle_name' => "VARCHAR(100) NULL AFTER `first_name`",
+        'general_average' => "DECIMAL(5,2) NULL AFTER `lrn`",
+        'added_by' => "INT NULL AFTER `school_year`",
+    ]);
+
+    ensure_table_columns($list_conn, 'g11_completers', [
+        'sex' => "ENUM('Male', 'Female') NULL AFTER `middle_name`",
+        'added_by' => "INT NULL AFTER `school_year`",
+    ]);
+
+    ensure_table_columns($list_conn, 'watchlist', [
+        'last_name' => "VARCHAR(100) NULL AFTER `id`",
+        'first_name' => "VARCHAR(100) NULL AFTER `last_name`",
+        'middle_name' => "VARCHAR(100) NULL AFTER `first_name`",
+        'added_by' => "INT NULL AFTER `school_year`",
+    ]);
+
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['list_action'])) {
         $uid = (int)($_SESSION['user_id'] ?? 0);
         $action = $_POST['list_action'];

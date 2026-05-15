@@ -135,9 +135,14 @@ CREATE TABLE IF NOT EXISTS encodings (
 -- STEM Qualifiers
 CREATE TABLE IF NOT EXISTS stem_qualifiers (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    last_name VARCHAR(100),
+    first_name VARCHAR(100),
+    middle_name VARCHAR(100),
     lrn VARCHAR(12) NOT NULL,
+    general_average DECIMAL(5,2) NULL,
     pathway_cluster VARCHAR(100),
     school_year VARCHAR(20),
+    added_by INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -148,20 +153,26 @@ CREATE TABLE IF NOT EXISTS g11_completers (
     last_name VARCHAR(100),
     first_name VARCHAR(100),
     middle_name VARCHAR(100),
+    sex ENUM('Male', 'Female') NULL,
     section VARCHAR(100),
     strand VARCHAR(100),
     completer_status VARCHAR(50) NOT NULL DEFAULT 'regular',
     school_year VARCHAR(20),
+    added_by INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Watchlist (flagged students)
 CREATE TABLE IF NOT EXISTS watchlist (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    last_name VARCHAR(100),
+    first_name VARCHAR(100),
+    middle_name VARCHAR(100),
     lrn VARCHAR(12) NOT NULL,
     issue_type VARCHAR(100),
     issue_details TEXT,
     school_year VARCHAR(20),
+    added_by INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
