@@ -25,9 +25,18 @@ if (!$conn->connect_error) {
         max_capacity INT NOT NULL DEFAULT 40,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )");
-    $conn->query("ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS adviser_id INT NULL AFTER section_name");
-    $conn->query("ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS adviser_name VARCHAR(150) NULL AFTER adviser_id");
-    $conn->query("ALTER TABLE students ADD COLUMN IF NOT EXISTS assigned_section VARCHAR(100)");
+    $classroom_adviser_id_check = $conn->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='" . $conn->real_escape_string(DB_NAME) . "' AND TABLE_NAME='classrooms' AND COLUMN_NAME='adviser_id'");
+    if ($classroom_adviser_id_check && $classroom_adviser_id_check->num_rows === 0) {
+        $conn->query("ALTER TABLE classrooms ADD COLUMN adviser_id INT NULL AFTER section_name");
+    }
+    $classroom_adviser_name_check = $conn->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='" . $conn->real_escape_string(DB_NAME) . "' AND TABLE_NAME='classrooms' AND COLUMN_NAME='adviser_name'");
+    if ($classroom_adviser_name_check && $classroom_adviser_name_check->num_rows === 0) {
+        $conn->query("ALTER TABLE classrooms ADD COLUMN adviser_name VARCHAR(150) NULL AFTER adviser_id");
+    }
+    $student_assigned_section_check = $conn->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='" . $conn->real_escape_string(DB_NAME) . "' AND TABLE_NAME='students' AND COLUMN_NAME='assigned_section'");
+    if ($student_assigned_section_check && $student_assigned_section_check->num_rows === 0) {
+        $conn->query("ALTER TABLE students ADD COLUMN assigned_section VARCHAR(100)");
+    }
     // Add group_chat_url safely — check first to support MySQL 5.7
     $col_check = $conn->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='" . $conn->real_escape_string(DB_NAME) . "' AND TABLE_NAME='classrooms' AND COLUMN_NAME='group_chat_url'");
     if ($col_check && $col_check->num_rows === 0) {

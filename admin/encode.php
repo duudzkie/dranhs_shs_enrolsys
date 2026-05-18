@@ -17,8 +17,16 @@ $catalog_for_js = [
 if ($conn->connect_error) {
     $db_error = 'Database connection failed.';
 } else {
-    // Ensure assigned_section column exists on students
-    $conn->query("ALTER TABLE students ADD COLUMN IF NOT EXISTS assigned_section VARCHAR(100)");
+    // Ensure assigned_section column exists on students without MySQL 8-only syntax.
+    $assigned_section_check = $conn->query(
+        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA='" . $conn->real_escape_string(DB_NAME) . "'
+           AND TABLE_NAME='students'
+           AND COLUMN_NAME='assigned_section'"
+    );
+    if ($assigned_section_check && $assigned_section_check->num_rows === 0) {
+        $conn->query("ALTER TABLE students ADD COLUMN assigned_section VARCHAR(100)");
+    }
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['enc_action'] ?? '') === 'enroll') {
         $sid     = (int)($_POST['student_id'] ?? 0);
         $section = trim($_POST['assigned_section'] ?? '');
