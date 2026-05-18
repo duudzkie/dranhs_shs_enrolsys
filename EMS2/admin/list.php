@@ -47,6 +47,24 @@ $stem_cluster_selections = [
     '3' => 'earth_space_weather',
 ];
 
+function ensure_table_columns(mysqli $conn, string $table_name, array $columns): void {
+    $safe_table = $conn->real_escape_string($table_name);
+
+    foreach ($columns as $column_name => $definition) {
+        $safe_column = $conn->real_escape_string($column_name);
+        $exists = $conn->query(
+            "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = '" . $conn->real_escape_string(DB_NAME) . "'
+             AND TABLE_NAME = '{$safe_table}'
+             AND COLUMN_NAME = '{$safe_column}'"
+        );
+
+        if ($exists && $exists->num_rows === 0) {
+            $conn->query("ALTER TABLE `{$table_name}` ADD COLUMN `{$column_name}` {$definition}");
+        }
+    }
+}
+
 $csv_templates = [
     'stem' => "last_name,first_name,middle_name,lrn,general_average,pathway_cluster\nDela Cruz,Juan,S,123456789012,95.50,2\n",
     'g11' => "last_name,first_name,middle_name,sex,lrn,section,strand,completer_status\nSantos,Maria,L,Female,123456789012,HYDROGEN,STEM,regular\n",
@@ -146,6 +164,26 @@ function g12_track_from_strand($strand_value) {
 }
 
 if (!$list_conn->connect_error) {
+    ensure_table_columns($list_conn, 'stem_qualifiers', [
+        'last_name' => "VARCHAR(100) NULL AFTER `id`",
+        'first_name' => "VARCHAR(100) NULL AFTER `last_name`",
+        'middle_name' => "VARCHAR(100) NULL AFTER `first_name`",
+        'general_average' => "DECIMAL(5,2) NULL AFTER `lrn`",
+        'added_by' => "INT NULL AFTER `school_year`",
+    ]);
+
+    ensure_table_columns($list_conn, 'g11_completers', [
+        'sex' => "ENUM('Male', 'Female') NULL AFTER `middle_name`",
+        'added_by' => "INT NULL AFTER `school_year`",
+    ]);
+
+    ensure_table_columns($list_conn, 'watchlist', [
+        'last_name' => "VARCHAR(100) NULL AFTER `id`",
+        'first_name' => "VARCHAR(100) NULL AFTER `last_name`",
+        'middle_name' => "VARCHAR(100) NULL AFTER `first_name`",
+        'added_by' => "INT NULL AFTER `school_year`",
+    ]);
+
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['list_action'])) {
         $uid = (int)($_SESSION['user_id'] ?? 0);
         $action = $_POST['list_action'];
@@ -308,15 +346,15 @@ if (!$list_conn->connect_error) {
                     $toast_msg = 'LRN must be exactly 12 digits.';
                     $toast_type = 'error';
                 } elseif ($lrn !== '' && student_exists_by_lrn($list_conn, $lrn)) {
-                    $toast_msg = 'LRN already exists in the student table. Watchlist entry was not added.';
+                    $toast_msg = 'LRN already exists in the student table. Focus List entry was not added.';
                     $toast_type = 'error';
                 } elseif ($lrn !== '' && record_exists_by_lrn($list_conn, 'watchlist', $lrn, $school_year)) {
-                    $toast_msg = 'Duplicate LRN found. Watchlist entry was not added again.';
+                    $toast_msg = 'Duplicate LRN found. Focus List entry was not added again.';
                     $toast_type = 'error';
                 } else {
                     $s = $list_conn->prepare("INSERT INTO watchlist (last_name,first_name,middle_name,lrn,issue_type,issue_details,school_year,added_by) VALUES (?,?,?,?,?,?,?,?)");
                     if ($s) { $s->bind_param("sssssssi",$ln,$fn,$mn,$lrn,$it,$id2,$school_year,$uid); $s->execute(); $s->close(); }
-                    $toast_msg = 'Watchlist entry added.';
+                    $toast_msg = 'Focus List entry added.';
                 }
             }
         } elseif ($action === 'delete_watch') {
@@ -345,7 +383,7 @@ if (!$list_conn->connect_error) {
                     if ($s) { $s->bind_param("sssssssi",$ln,$fn,$mn,$lrn,$it,$id2,$school_year,$uid); $s->execute(); $s->close(); $count++; }
                 }
                 fclose($handle);
-                $toast_msg = "$count watchlist entr" . ($count === 1 ? 'y' : 'ies') . " imported.";
+                $toast_msg = "$count Focus List entr" . ($count === 1 ? 'y' : 'ies') . " imported.";
                 if ($duplicate_count > 0 || $invalid_lrn_count > 0 || $student_duplicate_count > 0) {
                     $toast_msg .= " Skipped $duplicate_count duplicate(s), $student_duplicate_count existing student LRN row(s), and $invalid_lrn_count invalid LRN row(s).";
                 }
@@ -404,14 +442,14 @@ foreach ($g11_rows as $row) {
 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
     <div class="px-6 py-5 border-b border-slate-100">
         <h2 class="text-2xl font-heading font-black text-dranhs-dark">Academic Lists</h2>
-        <p class="text-sm text-slate-500 mt-1">Manage STEM qualifiers, Grade 11 completers, and watchlist entries for <?php echo htmlspecialchars($school_year); ?>.</p>
+        <p class="text-sm text-slate-500 mt-1">Manage STEM qualifiers, Grade 11 completers, and Focus List entries for <?php echo htmlspecialchars($school_year); ?>.</p>
     </div>
 
     <div class="border-b border-slate-100 bg-slate-50 px-4">
         <div class="flex flex-wrap gap-2 py-3">
             <button type="button" class="list-tab-btn px-4 py-2 rounded-lg text-sm font-bold bg-dranhs-green text-white" data-tab="stem">STEM Qualifiers</button>
             <button type="button" class="list-tab-btn px-4 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200" data-tab="g11">Grade 11 Completers</button>
-            <button type="button" class="list-tab-btn px-4 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200" data-tab="watch">Watchlist</button>
+            <button type="button" class="list-tab-btn px-4 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200" data-tab="watch">Focus List</button>
         </div>
     </div>
 
@@ -645,23 +683,23 @@ foreach ($g11_rows as $row) {
             <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
                 <div class="xl:col-span-1">
                     <div class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                        <h3 class="text-lg font-heading font-black text-dranhs-dark">Add Watchlist Entry</h3>
+                        <h3 class="text-lg font-heading font-black text-dranhs-dark">Add Focus List Entry</h3>
                         <form method="POST" class="mt-4 space-y-3">
                             <input type="hidden" name="list_action" value="add_watch">
                             <input name="last_name" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm" placeholder="Last Name" required>
                             <input name="first_name" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm" placeholder="First Name" required>
                             <input name="middle_name" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm" placeholder="Middle Name">
                             <input name="lrn" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm" placeholder="LRN">
-                            <input name="issue_type" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm" placeholder="Issue Type">
-                            <textarea name="issue_details" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm min-h-[120px]" placeholder="Issue Details"></textarea>
-                            <button type="submit" class="w-full rounded-xl bg-dranhs-green text-white py-3 text-sm font-bold hover:bg-emerald-700 transition-colors">Save Watchlist Entry</button>
+                            <input name="issue_type" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm" placeholder="Flag Reason / Issue Type">
+                            <textarea name="issue_details" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm min-h-[120px]" placeholder="Flag Description / Issue Details"></textarea>
+                            <button type="submit" class="w-full rounded-xl bg-dranhs-green text-white py-3 text-sm font-bold hover:bg-emerald-700 transition-colors">Save Focus List Entry</button>
                         </form>
                         <div class="mt-6 pt-5 border-t border-slate-200">
                             <div class="flex items-center justify-between gap-3">
                                 <h4 class="text-sm font-black uppercase tracking-wider text-slate-600">Import CSV</h4>
                                 <a
                                     href="data:text/csv;charset=utf-8,<?php echo rawurlencode($csv_templates['watch']); ?>"
-                                    download="watchlist_template.csv"
+                                    download="focus_list_template.csv"
                                     class="inline-flex items-center rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-white transition-colors"
                                 >
                                     Download Template
@@ -672,7 +710,7 @@ foreach ($g11_rows as $row) {
                             <form method="POST" enctype="multipart/form-data" class="mt-3 space-y-3">
                                 <input type="hidden" name="list_action" value="csv_watch">
                                 <input type="file" name="csv_file" accept=".csv" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm bg-white" required>
-                                <button type="submit" class="w-full rounded-xl border border-dranhs-green text-dranhs-green py-3 text-sm font-bold hover:bg-emerald-50 transition-colors">Upload Watchlist CSV</button>
+                                <button type="submit" class="w-full rounded-xl border border-dranhs-green text-dranhs-green py-3 text-sm font-bold hover:bg-emerald-50 transition-colors">Upload Focus List CSV</button>
                             </form>
                         </div>
                     </div>
@@ -700,7 +738,7 @@ foreach ($g11_rows as $row) {
                                 </thead>
                                 <tbody class="divide-y divide-slate-100 bg-white">
                                     <?php if (empty($watch_rows)): ?>
-                                        <tr><td colspan="6" class="px-4 py-6 text-center text-slate-500">No watchlist entries yet.</td></tr>
+                                        <tr><td colspan="6" class="px-4 py-6 text-center text-slate-500">No Focus List entries yet.</td></tr>
                                     <?php else: ?>
                                         <?php foreach ($watch_rows as $index => $row): ?>
                                             <tr class="stem-row">

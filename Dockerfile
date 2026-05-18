@@ -23,8 +23,8 @@ WORKDIR /var/www/html
 RUN rm -rf /var/www/html/*
 COPY . /var/www/html/
 
-# Configure Apache VirtualHost to serve DRANHS portal
-RUN cat > /etc/apache2/sites-available/000-default.conf <<'EOF'
+# Configure Apache VirtualHost template to serve DRANHS portal
+RUN cat > /etc/apache2/sites-available/000-default.conf.template <<'EOF'
 <VirtualHost *:${PORT}>
     ServerAdmin admin@dranhs.local
     DocumentRoot /var/www/html
@@ -52,12 +52,26 @@ RUN cat > /etc/apache2/sites-available/000-default.conf <<'EOF'
 </VirtualHost>
 EOF
 
-# Make Apache listen on $PORT (Railway assigns dynamic port)
-RUN sed -i 's/Listen 80/Listen ${PORT}/' /etc/apache2/ports.conf
-
 # Create startup script that initializes DB then starts Apache
 RUN cat > /usr/local/bin/start.sh <<'SCRIPT'
 #!/bin/bash
+set -e
+
+PORT="${PORT:-80}"
+
+# Railway injects PORT at runtime, so Apache must be configured here instead of at build time.
+sed "s/\${PORT}/${PORT}/g" /etc/apache2/sites-available/000-default.conf.template > /etc/apache2/sites-available/000-default.conf
+cat > /etc/apache2/ports.conf <<EOF
+Listen ${PORT}
+
+<IfModule ssl_module>
+    Listen 443
+</IfModule>
+
+<IfModule mod_gnutls.c>
+    Listen 443
+</IfModule>
+EOF
 # Auto-initialize database on first boot (safe — uses IF NOT EXISTS)
 if [ -n "$MYSQLHOST" ]; then
     echo "Railway MySQL detected. Running database setup..."

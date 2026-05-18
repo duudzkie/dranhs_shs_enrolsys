@@ -1255,7 +1255,7 @@ document.querySelectorAll('.cr-masterlist-btn').forEach(btn => btn.addEventListe
                         ? '<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-bold">Enrolled</span>'
                         : '<span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">For Encoding</span>';
                     const redFlagBadge = watchIssueType
-                        ? `<span class="text-red-600 font-bold uppercase tracking-wide" title="${watchIssueDetails ? watchIssueDetails.replace(/"/g, '&quot;') : 'No additional notes provided in the watchlist.'}">FLAGGED</span>`
+                        ? `<span class="inline-flex items-center gap-1 text-red-600 font-bold uppercase tracking-wide" title="${watchIssueDetails ? watchIssueDetails.replace(/"/g, '&quot;') : 'No additional notes provided in the Focus List.'}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M7 6v14l5-5 5 5V6"/></svg>FLAGGED</span>`
                         : '<span class="text-slate-300 font-semibold">--</span>';
                     return `<tr class="hover:bg-slate-50">
                         <td class="px-4 py-3 text-slate-400 font-semibold">${rowNumber}</td>

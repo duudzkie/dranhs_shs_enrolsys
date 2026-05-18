@@ -1,4 +1,5 @@
 <?php
+ob_start();
 if (session_status() === PHP_SESSION_NONE) session_start();
 require_once __DIR__ . '/../db.php';
 // Check if user is actually logged in — also verify user still exists in DB
@@ -380,3 +381,4 @@ $inactiveClasses = 'text-slate-300 hover:bg-slate-800 hover:text-white';
     </script>
 </body>
 </html>
+<?php ob_end_flush(); ?>

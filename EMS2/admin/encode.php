@@ -157,7 +157,10 @@ function enc_name($r) {
                         <div class="font-semibold text-slate-700"><?php echo htmlspecialchars(enc_name($row)); ?></div>
                         <div class="text-xs text-slate-400 mt-1">Verified <?php echo htmlspecialchars(date('M d, Y', strtotime($row['created_at']))); ?></div>
                         <?php if (!empty($row['watch_issue_type'])): ?>
-                            <div class="mt-2 inline-flex items-center rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-red-700 border border-red-200">Red Flag: <?php echo htmlspecialchars($row['watch_issue_type']); ?></div>
+                            <div class="mt-2 inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-red-700 border border-red-200" title="<?php echo htmlspecialchars($row['watch_issue_details'] ?: 'No additional notes provided in the Focus List.'); ?>">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M7 6v14l5-5 5 5V6"/></svg>
+                                Flagged: <?php echo htmlspecialchars($row['watch_issue_type']); ?>
+                            </div>
                         <?php endif; ?>
                     </td>
                     <td class="px-6 py-4 text-slate-600"><?php echo htmlspecialchars($row['lrn'] ?: '--'); ?></td>

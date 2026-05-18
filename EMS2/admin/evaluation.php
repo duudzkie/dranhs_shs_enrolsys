@@ -98,6 +98,57 @@ if ($conn->connect_error) {
                 }
 
                 $toast_message = 'verified';
+            } elseif ($_POST['eval_action'] === 'flag') {
+                $flag_type = trim($_POST['flag_issue_type'] ?? '');
+                $flag_details = trim($_POST['flag_issue_details'] ?? '');
+                if ($flag_type === '') {
+                    $flag_type = 'Flagged by Evaluator';
+                }
+
+                $student = null;
+                $retrieve = $conn->prepare("SELECT last_name, first_name, middle_name, lrn, school_year FROM students WHERE id = ? LIMIT 1");
+                if ($retrieve) {
+                    $retrieve->bind_param("i", $sid);
+                    $retrieve->execute();
+                    $student = $retrieve->get_result()->fetch_assoc();
+                    $retrieve->close();
+                }
+
+                if ($student) {
+                    $lrn = $student['lrn'] ?? '';
+                    $school_year = $student['school_year'] ?? '';
+                    $last_name = $student['last_name'] ?? '';
+                    $first_name = $student['first_name'] ?? '';
+                    $middle_name = $student['middle_name'] ?? '';
+
+                    $check = $conn->prepare("SELECT id FROM watchlist WHERE lrn = ? AND school_year = ? LIMIT 1");
+                    if ($check) {
+                        $check->bind_param("ss", $lrn, $school_year);
+                        $check->execute();
+                        $result = $check->get_result();
+                        $existing_id = $result->fetch_assoc()['id'] ?? null;
+                        $check->close();
+
+                        if ($existing_id) {
+                            $updated_by = (int)($_SESSION['user_id'] ?? 0);
+                            $update = $conn->prepare("UPDATE watchlist SET issue_type = ?, issue_details = ?, added_by = ? WHERE id = ?");
+                            if ($update) {
+                                $update->bind_param("ssii", $flag_type, $flag_details, $updated_by, $existing_id);
+                                $update->execute();
+                                $update->close();
+                            }
+                        } else {
+                            $added_by = (int)($_SESSION['user_id'] ?? 0);
+                            $insert = $conn->prepare("INSERT INTO watchlist (last_name,first_name,middle_name,lrn,issue_type,issue_details,school_year,added_by) VALUES (?,?,?,?,?,?,?,?)");
+                            if ($insert) {
+                                $insert->bind_param("sssssssi", $last_name, $first_name, $middle_name, $lrn, $flag_type, $flag_details, $school_year, $added_by);
+                                $insert->execute();
+                                $insert->close();
+                            }
+                        }
+                    }
+                }
+                $toast_message = 'flagged';
             } elseif ($_POST['eval_action'] === 'withdraw') {
                 $stmt = $conn->prepare("UPDATE students SET enrollment_status = 'withdrawn' WHERE id = ?");
                 if ($stmt) { $stmt->bind_param("i", $sid); $stmt->execute(); $stmt->close(); }
@@ -146,8 +197,8 @@ function eval_full_name($row) {
 <?php endif; ?>
 
 <?php if (isset($_GET['msg'])): ?>
-<div class="mb-4 rounded-xl border px-5 py-4 text-sm font-semibold <?php echo $_GET['msg'] === 'withdrawn' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'; ?>">
-    <?php echo $_GET['msg'] === 'withdrawn' ? 'Enrollee marked for withdrawal. Review on the Student page.' : 'Enrollee verified and moved to Encoding.'; ?>
+<div class="mb-4 rounded-xl border px-5 py-4 text-sm font-semibold <?php echo $_GET['msg'] === 'withdrawn' ? 'bg-red-50 border-red-200 text-red-700' : ($_GET['msg'] === 'flagged' ? 'bg-red-50 border-red-200 text-red-700' : 'bg-emerald-50 border-emerald-200 text-emerald-700'); ?>">
+    <?php echo $_GET['msg'] === 'withdrawn' ? 'Enrollee marked for withdrawal. Review on the Student page.' : ($_GET['msg'] === 'flagged' ? 'Student added to the Focus List and will be reviewed by the evaluator.' : 'Enrollee verified and moved to Encoding.'); ?>
 </div>
 <?php endif; ?>
 
@@ -192,7 +243,10 @@ function eval_full_name($row) {
                         <div class="font-semibold text-slate-700"><?php echo htmlspecialchars(eval_full_name($row)); ?></div>
                         <div class="text-xs text-slate-400 mt-1">Filed <?php echo htmlspecialchars(date('M d, Y', strtotime($row['created_at']))); ?></div>
                         <?php if (!empty($row['watch_issue_type'])): ?>
-                            <div class="mt-2 inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-amber-700 border border-amber-200">Flagged: <?php echo htmlspecialchars($row['watch_issue_type']); ?></div>
+                            <div class="mt-2 inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-red-700 border border-red-200" title="<?php echo htmlspecialchars($row['watch_issue_details'] ?: 'No additional notes provided in the Focus List.'); ?>">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M7 6v14l5-5 5 5V6"/></svg>
+                                Flagged: <?php echo htmlspecialchars($row['watch_issue_type']); ?>
+                            </div>
                         <?php endif; ?>
                     </td>
                     <td class="px-6 py-4 text-slate-600"><?php echo htmlspecialchars($row['lrn'] ?: '--'); ?></td>
@@ -273,12 +327,29 @@ function eval_full_name($row) {
                         <!-- populated by JS based on student_type -->
                     </div>
                     <div class="px-5 pb-5 ml-2">
-                        <div id="eval-flag-alert" class="hidden mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-                            <p class="text-sm font-bold text-amber-800">This student is flagged: <span id="eval-flag-type"></span></p>
-                            <p id="eval-flag-details" class="mt-1 text-xs font-medium text-amber-700"></p>
+                        <div id="eval-flag-alert" class="hidden mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                            <div class="flex items-start gap-2">
+                                <span class="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-700">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M7 6v14l5-5 5 5V6"/></svg>
+                                </span>
+                                <div>
+                                    <p class="text-sm font-bold text-red-800">This student is on the Focus List (Flagged): <span id="eval-flag-type"></span></p>
+                                    <p id="eval-flag-details" class="mt-1 text-xs font-medium text-red-700"></p>
+                                </div>
+                            </div>
                         </div>
                         <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Notes / Remarks</label>
                         <textarea id="eval-notes" rows="2" placeholder="Optional notes about the documents or enrollee..." class="w-full bg-white border-2 border-slate-300 px-4 py-3 rounded-xl text-slate-800 text-sm font-medium focus:border-violet-600 focus:ring-2 focus:ring-violet-600/20 outline-none resize-none"></textarea>
+                        <div class="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
+                            <div class="flex items-center justify-between gap-3 mb-3">
+                                <div>
+                                    <h4 class="text-sm font-black uppercase tracking-widest text-red-700">Focus List / Red Flag</h4>
+                                    <p class="text-xs text-red-600 mt-1">Evaluator can tag this student with a focus list reason and description.</p>
+                                </div>
+                            </div>
+                            <input id="eval-flag-issue-type" type="text" name="flag_issue_type" class="w-full rounded-xl border border-red-300 bg-white px-4 py-3 text-sm" placeholder="Flag reason / issue type">
+                            <textarea id="eval-flag-issue-details" name="flag_issue_details" rows="3" class="w-full rounded-xl border border-red-300 bg-white px-4 py-3 text-sm mt-3" placeholder="Flag description / additional details"></textarea>
+                        </div>
                     </div>
                 </div>
 
@@ -301,6 +372,8 @@ function eval_full_name($row) {
                     <input type="hidden" name="doc_psa" id="eval-form-doc-psa" value="0">
                     <input type="hidden" name="doc_good" id="eval-form-doc-good" value="0">
                     <input type="hidden" name="eval_notes" id="eval-form-notes" value="">
+                    <input type="hidden" name="flag_issue_type" id="eval-form-flag-issue-type" value="">
+                    <input type="hidden" name="flag_issue_details" id="eval-form-flag-issue-details" value="">
                     <button type="submit" name="eval_action" value="verify"
                         class="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-dranhs-green text-white font-bold text-sm hover:bg-emerald-700 transition-colors shadow-md">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -311,6 +384,11 @@ function eval_full_name($row) {
                         class="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-red-50 text-red-600 border-2 border-red-200 font-bold text-sm hover:bg-red-100 transition-colors">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                         For Withdrawal
+                    </button>
+                    <button type="submit" name="eval_action" value="flag"
+                        class="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-red-600 text-white font-bold text-sm hover:bg-red-700 transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v18l7-5 7 5V3H5z"/></svg>
+                        Tag as Flagged
                     </button>
                     <button type="button" id="eval-cancel-btn"
                         class="inline-flex items-center justify-center px-6 py-3.5 rounded-xl border-2 border-slate-300 text-slate-600 font-bold text-sm hover:bg-slate-100 transition-colors">
@@ -363,10 +441,11 @@ function eval_full_name($row) {
                             <option value="Grade 11">Grade 11</option>
                             <option value="Grade 12">Grade 12</option>
                         </select></div>
-                        <div><label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Semester</label>
+                        <div><label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Term</label>
                         <select name="semester" id="ee-semester" class="w-full bg-white border-2 border-slate-300 px-4 py-3 rounded-xl text-sm font-medium focus:border-dranhs-green outline-none">
-                            <option value="1st">1st Semester</option>
-                            <option value="2nd">2nd Semester</option>
+                            <option value="term_1">Term 1</option>
+                            <option value="term_2">Term 2</option>
+                            <option value="term_3">Term 3</option>
                         </select></div>
                         <div><label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">LRN</label>
                         <input type="text" name="lrn" id="ee-lrn" maxlength="12" class="w-full bg-white border-2 border-slate-300 px-4 py-3 rounded-xl text-sm font-medium focus:border-dranhs-green outline-none"></div>
@@ -504,6 +583,20 @@ function evalFullName(s) {
 
 function tod(v) { return (v && String(v).trim()) ? String(v) : '--'; }
 
+function normalizeTermValue(value) {
+    if (value === '1st') return 'term_1';
+    if (value === '2nd') return 'term_2';
+    return value || '';
+}
+
+function formatTermLabel(value) {
+    const normalized = normalizeTermValue(value);
+    if (normalized === 'term_1') return 'Term 1';
+    if (normalized === 'term_2') return 'Term 2';
+    if (normalized === 'term_3') return 'Term 3';
+    return tod(value);
+}
+
 function infoCard(label, value) {
     return `<div class="rounded-xl bg-slate-50 border border-slate-100 p-3">
         <p class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">${label}</p>
@@ -598,7 +691,7 @@ function openEvalModal(student) {
         infoCard('Track', student.track),
         infoCard('Pathway / Strand', pathwayLabel(student.grade_level, student.pathway_strand)),
         infoCard('Student Type', student.student_type),
-        infoCard('Semester', student.semester),
+        infoCard('Term', formatTermLabel(student.semester)),
         infoCard('School Year', student.school_year),
         infoCard('Filed', student.created_at ? new Date(student.created_at).toLocaleDateString('en-PH', {year:'numeric',month:'short',day:'numeric'}) : '--'),
     ].join('');
@@ -685,15 +778,23 @@ function openEvalModal(student) {
 
     if (watchIssueType) {
         flagType.textContent = watchIssueType;
-        flagDetails.textContent = watchIssueDetails || 'No additional notes provided in the watchlist.';
+        flagDetails.textContent = watchIssueDetails || 'No additional notes provided in the Focus List.';
         flagAlert.classList.remove('hidden');
-        document.getElementById('eval-notes').value = watchIssueDetails;
     } else {
         flagType.textContent = '';
         flagDetails.textContent = '';
         flagAlert.classList.add('hidden');
-        document.getElementById('eval-notes').value = '';
     }
+
+    const flagIssueTypeInput = document.getElementById('eval-flag-issue-type');
+    const flagIssueDetailsInput = document.getElementById('eval-flag-issue-details');
+    if (flagIssueTypeInput) flagIssueTypeInput.value = watchIssueType;
+    if (flagIssueDetailsInput) flagIssueDetailsInput.value = watchIssueDetails;
+
+    const flagFormType = document.getElementById('eval-form-flag-issue-type');
+    const flagFormDetails = document.getElementById('eval-form-flag-issue-details');
+    if (flagFormType) flagFormType.value = watchIssueType;
+    if (flagFormDetails) flagFormDetails.value = watchIssueDetails;
 
     // Pathway / Strand cards — selectable, grade-level-aware label
     const isGrade11 = (student.grade_level || '') === 'Grade 11';
@@ -776,7 +877,7 @@ function openFullInfoModal(student) {
             { label: 'Learner Category', value: student.student_type },
             { label: 'School Year',      value: student.school_year },
             { label: 'Grade Level',      value: student.grade_level },
-            { label: 'Semester',         value: student.semester },
+            { label: 'Term',             value: formatTermLabel(student.semester) },
             { label: 'LRN',              value: student.lrn },
             { label: 'Track',            value: student.track },
             { label: 'Pathway / Strand', value: pathwayLabel(student.grade_level, student.pathway_strand) },
@@ -820,6 +921,11 @@ function openFullInfoModal(student) {
 document.querySelectorAll('.eval-open-btn').forEach(btn => {
     btn.addEventListener('click', function () {
         const student = JSON.parse(this.dataset.student);
+        const watchIssueType = String(student.watch_issue_type || '').trim();
+        if (watchIssueType) {
+            const confirmed = confirm('This student is on the Focus List and has been flagged. The evaluator will review the reason and description before proceeding. Continue to evaluation?');
+            if (!confirmed) return;
+        }
         openEvalModal(student);
     });
 });
@@ -845,6 +951,8 @@ document.getElementById('eval-action-form').addEventListener('submit', function 
     document.getElementById('eval-form-doc-psa').value  = document.getElementById('doc_psa')?.checked  ? '1' : '0';
     document.getElementById('eval-form-doc-good').value = document.getElementById('doc_good')?.checked ? '1' : '0';
     document.getElementById('eval-form-notes').value    = document.getElementById('eval-notes')?.value || '';
+    document.getElementById('eval-form-flag-issue-type').value = document.getElementById('eval-flag-issue-type')?.value || '';
+    document.getElementById('eval-form-flag-issue-details').value = document.getElementById('eval-flag-issue-details')?.value || '';
 });
 function eeSet(id, val) {
     const el = document.getElementById(id);
@@ -854,11 +962,12 @@ function eeSet(id, val) {
 function eeSetSelect(id, val) {
     const el = document.getElementById(id);
     if (!el) return;
-    el.value = val || '';
-    if (el.value === '' && val) {
+    const normalized = normalizeTermValue(val);
+    el.value = normalized || '';
+    if (el.value === '' && normalized) {
         const opt = document.createElement('option');
-        opt.value = val; opt.textContent = val;
-        el.appendChild(opt); el.value = val;
+        opt.value = normalized; opt.textContent = formatTermLabel(normalized);
+        el.appendChild(opt); el.value = normalized;
     }
 }
 function eeRefreshPathway() {
@@ -890,7 +999,7 @@ function openEvalEditModal(student) {
     eeSetSelect('ee-student-type', student.student_type);
     eeSet('ee-school-year', student.school_year);
     eeSetSelect('ee-grade-level', student.grade_level || 'Grade 11');
-    eeSetSelect('ee-semester', student.semester || '1st');
+    eeSetSelect('ee-semester', student.semester || 'term_1');
     eeSet('ee-lrn', student.lrn);
     eeSetSelect('ee-track', student.track);
     eeRefreshPathway();

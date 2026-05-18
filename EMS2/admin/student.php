@@ -49,6 +49,36 @@ function verify_current_user_password($conn, $user_id, $password) {
 if ($conn->connect_error) {
     $db_error = 'Database connection failed.';
 } else {
+    $student_assigned_section_check = $conn->query(
+        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA='" . $conn->real_escape_string(DB_NAME) . "'
+           AND TABLE_NAME='students'
+           AND COLUMN_NAME='assigned_section'"
+    );
+    if ($student_assigned_section_check && $student_assigned_section_check->num_rows === 0) {
+        $conn->query("ALTER TABLE students ADD COLUMN assigned_section VARCHAR(100)");
+    }
+
+    $encoding_photo_path_check = $conn->query(
+        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA='" . $conn->real_escape_string(DB_NAME) . "'
+           AND TABLE_NAME='encodings'
+           AND COLUMN_NAME='id_photo_path'"
+    );
+    if ($encoding_photo_path_check && $encoding_photo_path_check->num_rows === 0) {
+        $conn->query("ALTER TABLE encodings ADD COLUMN id_photo_path VARCHAR(255) NULL");
+    }
+
+    $encoding_has_photo_check = $conn->query(
+        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA='" . $conn->real_escape_string(DB_NAME) . "'
+           AND TABLE_NAME='encodings'
+           AND COLUMN_NAME='has_id_photo'"
+    );
+    if ($encoding_has_photo_check && $encoding_has_photo_check->num_rows === 0) {
+        $conn->query("ALTER TABLE encodings ADD COLUMN has_id_photo TINYINT(1) NOT NULL DEFAULT 0");
+    }
+
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         if ($_POST['action'] === 'update_student') {
             $student_id = (int) ($_POST['student_id'] ?? 0);
@@ -343,10 +373,11 @@ if ($conn->connect_error) {
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Semester</label>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Term</label>
                             <select name="semester" id="edit-semester" class="w-full bg-white border-2 border-slate-300 px-4 py-3 rounded-xl text-slate-800 text-sm font-medium focus:border-dranhs-green focus:ring-2 focus:ring-dranhs-green/20 outline-none">
-                                <option value="1st">1st Semester</option>
-                                <option value="2nd">2nd Semester</option>
+                                <option value="term_1">Term 1</option>
+                                <option value="term_2">Term 2</option>
+                                <option value="term_3">Term 3</option>
                             </select>
                         </div>
                         <div>
@@ -691,6 +722,20 @@ function textOrDash(value) {
     return value && String(value).trim() !== '' ? String(value) : '--';
 }
 
+function normalizeTermValue(value) {
+    if (value === '1st') return 'term_1';
+    if (value === '2nd') return 'term_2';
+    return value || '';
+}
+
+function formatTermLabel(value) {
+    const normalized = normalizeTermValue(value);
+    if (normalized === 'term_1') return 'Term 1';
+    if (normalized === 'term_2') return 'Term 2';
+    if (normalized === 'term_3') return 'Term 3';
+    return textOrDash(value);
+}
+
 function fullName(student) {
     return `${textOrDash(student.last_name)}, ${textOrDash(student.first_name)}${student.middle_name ? ' ' + String(student.middle_name).charAt(0).toUpperCase() + '.' : ''}${student.extension_name ? ' ' + student.extension_name : ''}`;
 }
@@ -765,14 +810,15 @@ function calcAge(birthdateStr) {
 function setSelectValue(id, value) {
     const el = document.getElementById(id);
     if (!el) return;
-    el.value = value || '';
-    if (el.value === '' && value) {
+    const normalized = normalizeTermValue(value);
+    el.value = normalized || '';
+    if (el.value === '' && normalized) {
         // value not in options, add it
         const opt = document.createElement('option');
-        opt.value = value;
-        opt.textContent = value;
+        opt.value = normalized;
+        opt.textContent = formatTermLabel(normalized);
         el.appendChild(opt);
-        el.value = value;
+        el.value = normalized;
     }
 }
 
@@ -825,7 +871,7 @@ function populateEditModal(student) {
     setSelectValue('edit-student-type', student.student_type);
     document.getElementById('edit-school-year').value = student.school_year || '';
     setSelectValue('edit-grade-level', student.grade_level || 'Grade 11');
-    setSelectValue('edit-semester', student.semester || '1st');
+    setSelectValue('edit-semester', student.semester || 'term_1');
     document.getElementById('edit-lrn').value = student.lrn || '';
     setSelectValue('edit-track', student.track || '');
     refreshPathwayOptions();
@@ -914,7 +960,7 @@ function populateViewModal(student) {
                     '<div class="flex-1 grid grid-cols-2 gap-3 content-start">' +
                         infoBox('Learner Category', student.student_type) +
                         infoBox('School Year', student.school_year) +
-                        infoBox('Semester', student.semester) +
+                        infoBox('Term', formatTermLabel(student.semester)) +
                         infoBox('LRN', student.lrn) +
                     '</div>' +
                 '</div>' +

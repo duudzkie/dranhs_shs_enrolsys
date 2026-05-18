@@ -3,7 +3,7 @@ require_once __DIR__ . '/db.php';
 $conn = db_connect();
 
 $school_year = '2026 - 2027';
-$semester = '1st';
+$semester = 'term_1';
 $phase_start_date = date('Y-m-d');
 $previous_school_year = '';
 
@@ -392,10 +392,11 @@ if (!$conn->connect_error) {
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div class="form-group">
-                        <label class="form-label">Semester</label>
+                        <label class="form-label">Term</label>
                         <select class="form-input" disabled>
-                            <option value="1st"<?php echo ($semester === '1st' ? ' selected' : ''); ?>>1st Semester</option>
-                            <option value="2nd"<?php echo ($semester === '2nd' ? ' selected' : ''); ?>>2nd Semester</option>
+                            <option value="term_1"<?php echo (($semester === 'term_1' || $semester === '1st') ? ' selected' : ''); ?>>Term 1</option>
+                            <option value="term_2"<?php echo (($semester === 'term_2' || $semester === '2nd') ? ' selected' : ''); ?>>Term 2</option>
+                            <option value="term_3"<?php echo ($semester === 'term_3' ? ' selected' : ''); ?>>Term 3</option>
                         </select>
                         <input type="hidden" name="semester" value="<?php echo htmlspecialchars($semester); ?>">
                     </div>
