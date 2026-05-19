@@ -61,11 +61,7 @@ function ss_tab_from_action($action) {
     }
 }
 
-// Ensure user_id column exists in advisers_accounts (MySQL 5.7 safe)
-$_col_chk = $conn->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='" . $conn->real_escape_string(DB_NAME) . "' AND TABLE_NAME='advisers_accounts' AND COLUMN_NAME='user_id'");
-if ($_col_chk && $_col_chk->num_rows === 0) {
-    $conn->query("ALTER TABLE advisers_accounts ADD COLUMN user_id INT NULL");
-}
+// advisers are now managed in the users table (via account.php)
 
 $theme_dir = __DIR__ . '/../uploads/theme/';
 if (!is_dir($theme_dir)) mkdir($theme_dir, 0755, true);
@@ -224,28 +220,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $name = trim(strtoupper($_POST['name']));
             
             if (!empty($name)) {
-                if ($cat === 'faculty_advisers') {
-                    $avatarVal = NULL;
-                    
-                    // Handle file upload for adviser
-                    if (isset($_FILES['avatar']) && $_FILES['avatar']['error'] === UPLOAD_ERR_OK) {
-                        $tmp_name = $_FILES['avatar']['tmp_name'];
-                        $fname = basename($_FILES['avatar']['name']);
-                        $ext = strtolower(pathinfo($fname, PATHINFO_EXTENSION));
-                        if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp'])) {
-                            $new_fname = uniqid('adv_') . '.' . $ext;
-                            if (move_uploaded_file($tmp_name, $upload_dir . $new_fname)) {
-                                $avatarVal = 'uploads/advisers/' . $new_fname;
-                            }
-                        }
-                    }
-
-                    $stmt = $conn->prepare("INSERT INTO advisers_accounts (name, avatar) VALUES (?, ?)");
-                    $stmt->bind_param("ss", $name, $avatarVal);
-                    $stmt->execute();
-                    $stmt->close();
-                    $toast_message = 'Adviser added!';
-                    $toast_type = 'success';
+                    // Faculty advisers now managed on Account page
+                    $toast_message = 'Advisers are managed from the Accounts page.';
+                    $toast_type = 'info';
                 } else {
                     // Handle sections (g10_sections, g11_sections or g12_sections)
                     $grade_level = ($cat === 'g10_sections') ? '10' : (($cat === 'g11_sections') ? '11' : '12');
@@ -460,24 +437,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $cat = $_POST['category'] ?? '';
             
             if ($cat === 'faculty_advisers') {
-                // Delete adviser from advisers_accounts
-                $q = $conn->prepare("SELECT avatar FROM advisers_accounts WHERE id = ?");
-                $q->bind_param("i", $id);
-                $q->execute();
-                $r = $q->get_result();
-                if ($r && $row = $r->fetch_assoc()) {
-                    if ($row['avatar'] && file_exists('../' . $row['avatar'])) {
-                        unlink('../' . $row['avatar']);
-                    }
-                }
-                $q->close();
-
-                $stmt = $conn->prepare("DELETE FROM advisers_accounts WHERE id = ?");
-                $stmt->bind_param("i", $id);
-                $stmt->execute();
-                $stmt->close();
-                $toast_message = 'Adviser deleted.';
-                $toast_type = 'success';
+                // Advisers managed on Account page now
+                $toast_message = 'Advisers are managed from the Accounts page.';
+                $toast_type = 'info';
             } else {
                 // Delete section from add_sections
                 $stmt = $conn->prepare("DELETE FROM add_sections WHERE id = ?");
@@ -535,8 +497,8 @@ $registries = [
     'g12_sections' => []
 ];
 
-// Fetch advisers from advisers_accounts table
-$adv_res = $conn->query("SELECT id, name, avatar, created_at FROM advisers_accounts ORDER BY name ASC");
+// Advisers now come from users table
+$adv_res = $conn->query("SELECT id, full_name AS name, avatar, created_at FROM users WHERE status='active' ORDER BY full_name ASC");
 if ($adv_res) {
     while($r = $adv_res->fetch_assoc()) {
         $r['category'] = 'faculty_advisers';

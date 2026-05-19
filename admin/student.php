@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../pathway_strand_catalog.php';
 require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/../activity_log.php';
 $conn = db_connect();
 
 $student_rows = [];
@@ -140,6 +141,7 @@ if ($conn->connect_error) {
                 $stmt->bind_param($types, ...$params);
                 if ($stmt->execute()) {
                     $toast_message = 'Student record updated successfully.';
+                    log_activity($conn, 'student_updated', 'Updated student: ' . ($_POST['last_name'] ?? '') . ', ' . ($_POST['first_name'] ?? '') . ' (LRN: ' . ($_POST['lrn'] ?? '') . ')', 'student', $student_id);
                 } else {
                     $toast_message = 'Failed to update student record.';
                     $toast_type = 'error';
@@ -160,6 +162,7 @@ if ($conn->connect_error) {
                 $stmt = $conn->prepare("UPDATE students SET enrollment_status = 'withdrawn' WHERE id = ?");
                 if ($stmt) { $stmt->bind_param("i", $sid); $stmt->execute(); $stmt->close(); }
                 $toast_message = 'Student has been withdrawn successfully.';
+                log_activity($conn, 'student_withdrawn', 'Withdrew student ID#' . $sid, 'student', $sid);
             }
         }
     }

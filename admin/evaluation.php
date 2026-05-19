@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../pathway_strand_catalog.php';
 require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/../activity_log.php';
 
 $conn = db_connect();
 
@@ -47,6 +48,9 @@ if ($conn->connect_error) {
                 $stmt->bind_param(str_repeat('s', count($p)-1).'i', ...$p);
                 $stmt->execute();
                 $stmt->close();
+
+                // Log student update from evaluation
+                log_activity($conn, 'student_updated', 'Updated student record from evaluation (ID#' . $sid . ')', 'student', $sid);
             }
         }
     }
@@ -98,6 +102,9 @@ if ($conn->connect_error) {
                 }
 
                 $toast_message = 'verified';
+
+                // Log activity
+                log_activity($conn, 'student_verified', 'Verified student: ' . ($student_name ?? 'ID#' . $sid) . ' → for_encoding', 'student', $sid);
             } elseif ($_POST['eval_action'] === 'flag') {
                 $flag_type = trim($_POST['flag_issue_type'] ?? '');
                 $flag_details = trim($_POST['flag_issue_details'] ?? '');
@@ -149,10 +156,14 @@ if ($conn->connect_error) {
                     }
                 }
                 $toast_message = 'flagged';
+
+                $flag_student_name = trim(($last_name ?? '') . ', ' . ($first_name ?? ''));
+                log_activity($conn, 'student_flagged', 'Flagged student: ' . $flag_student_name . ' (' . $flag_type . ')', 'student', $sid);
             } elseif ($_POST['eval_action'] === 'withdraw') {
                 $stmt = $conn->prepare("UPDATE students SET enrollment_status = 'withdrawn' WHERE id = ?");
                 if ($stmt) { $stmt->bind_param("i", $sid); $stmt->execute(); $stmt->close(); }
                 $toast_message = 'withdrawn';
+                log_activity($conn, 'student_withdrawn', 'Withdrew student ID#' . $sid . ' from evaluation', 'student', $sid);
             }
         }
     }

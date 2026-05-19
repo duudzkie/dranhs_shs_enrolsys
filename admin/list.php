@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/../activity_log.php';
 $list_conn = db_connect();
 
 $toast_msg = ''; $toast_type = 'success';
@@ -214,6 +215,7 @@ if (!$list_conn->connect_error) {
             $toast_msg = $stem_qualifier_enabled
                 ? 'STEM qualifier restriction is now ON. Only listed qualifiers can choose restricted STEM clusters.'
                 : 'STEM qualifier restriction is now OFF. Students may freely choose any STEM cluster.';
+            log_activity($list_conn, 'settings_updated', 'STEM qualifier restriction toggled ' . ($stem_qualifier_enabled ? 'ON' : 'OFF'));
         } elseif ($action === 'add_stem') {
             $ln = trim($_POST['last_name']??''); $fn = trim($_POST['first_name']??'');
             $mn = trim($_POST['middle_name']??''); $lrn = normalize_lrn($_POST['lrn']??'');
@@ -234,6 +236,7 @@ if (!$list_conn->connect_error) {
                     $s = $list_conn->prepare("INSERT INTO stem_qualifiers (last_name,first_name,middle_name,lrn,general_average,pathway_cluster,school_year,added_by) VALUES (?,?,?,?,?,?,?,?)");
                     if ($s) { $s->bind_param("ssssdssi",$ln,$fn,$mn,$lrn,$ga,$cl,$school_year,$uid); $s->execute(); $s->close(); }
                     $toast_msg = 'STEM qualifier added.';
+                    log_activity($list_conn, 'list_entry_added', 'Added STEM qualifier: ' . $ln . ', ' . $fn . ' (LRN: ' . $lrn . ')');
                 }
             }
         } elseif ($action === 'delete_stem') {
@@ -241,6 +244,7 @@ if (!$list_conn->connect_error) {
             $s = $list_conn->prepare("DELETE FROM stem_qualifiers WHERE id=?");
             if ($s) { $s->bind_param("i",$id); $s->execute(); $s->close(); }
             $toast_msg = 'Record deleted.'; $toast_type = 'error';
+            log_activity($list_conn, 'list_entry_deleted', 'Deleted STEM qualifier ID#' . $id);
         } elseif ($action === 'csv_stem') {
             if (isset($_FILES['csv_file']) && $_FILES['csv_file']['error']===0) {
                 $handle = fopen($_FILES['csv_file']['tmp_name'],'r');
@@ -263,6 +267,7 @@ if (!$list_conn->connect_error) {
                 }
                 fclose($handle);
                 $toast_msg = "$count STEM qualifier(s) imported.";
+                log_activity($list_conn, 'list_csv_imported', 'Imported ' . $count . ' STEM qualifier(s) from CSV');
                 if ($duplicate_count > 0 || $invalid_lrn_count > 0 || $student_duplicate_count > 0) {
                     $toast_msg .= " Skipped $duplicate_count duplicate(s), $student_duplicate_count existing student LRN row(s), and $invalid_lrn_count invalid LRN row(s).";
                 }
@@ -295,6 +300,7 @@ if (!$list_conn->connect_error) {
                     $s = $list_conn->prepare("INSERT INTO g11_completers (last_name,first_name,middle_name,sex,lrn,section,strand,completer_status,school_year,added_by) VALUES (?,?,?,?,?,?,?,?,?,?)");
                     if ($s) { $s->bind_param("sssssssssi",$ln,$fn,$mn,$sex_val,$lrn,$sec,$strand,$completer_status,$school_year,$uid); $s->execute(); $s->close(); }
                     $toast_msg = 'Grade 11 completer added.';
+                    log_activity($list_conn, 'list_entry_added', 'Added G11 completer: ' . $ln . ', ' . $fn . ' (LRN: ' . $lrn . ')');
                 }
             }
         } elseif ($action === 'delete_g11') {
@@ -302,6 +308,7 @@ if (!$list_conn->connect_error) {
             $s = $list_conn->prepare("DELETE FROM g11_completers WHERE id=?");
             if ($s) { $s->bind_param("i",$id); $s->execute(); $s->close(); }
             $toast_msg = 'Record deleted.'; $toast_type = 'error';
+            log_activity($list_conn, 'list_entry_deleted', 'Deleted G11 completer ID#' . $id);
         } elseif ($action === 'csv_g11') {
             if (isset($_FILES['csv_file']) && $_FILES['csv_file']['error']===0) {
                 $handle = fopen($_FILES['csv_file']['tmp_name'],'r');
@@ -327,6 +334,7 @@ if (!$list_conn->connect_error) {
                 }
                 fclose($handle);
                 $toast_msg = "$count completer(s) imported.";
+                log_activity($list_conn, 'list_csv_imported', 'Imported ' . $count . ' G11 completer(s) from CSV');
                 if ($duplicate_count > 0 || $invalid_lrn_count > 0 || $student_duplicate_count > 0) {
                     $toast_msg .= " Skipped $duplicate_count duplicate(s), $student_duplicate_count existing student LRN row(s), and $invalid_lrn_count invalid LRN row(s).";
                 }
@@ -355,6 +363,7 @@ if (!$list_conn->connect_error) {
                     $s = $list_conn->prepare("INSERT INTO watchlist (last_name,first_name,middle_name,lrn,issue_type,issue_details,school_year,added_by) VALUES (?,?,?,?,?,?,?,?)");
                     if ($s) { $s->bind_param("sssssssi",$ln,$fn,$mn,$lrn,$it,$id2,$school_year,$uid); $s->execute(); $s->close(); }
                     $toast_msg = 'Focus List entry added.';
+                    log_activity($list_conn, 'list_entry_added', 'Added Focus List entry: ' . $ln . ', ' . $fn . ' (LRN: ' . $lrn . ')');
                 }
             }
         } elseif ($action === 'delete_watch') {
@@ -362,6 +371,7 @@ if (!$list_conn->connect_error) {
             $s = $list_conn->prepare("DELETE FROM watchlist WHERE id=?");
             if ($s) { $s->bind_param("i",$id); $s->execute(); $s->close(); }
             $toast_msg = 'Record deleted.'; $toast_type = 'error';
+            log_activity($list_conn, 'list_entry_deleted', 'Deleted Focus List entry ID#' . $id);
         } elseif ($action === 'csv_watch') {
             if (isset($_FILES['csv_file']) && $_FILES['csv_file']['error']===0) {
                 $handle = fopen($_FILES['csv_file']['tmp_name'],'r');
@@ -384,6 +394,7 @@ if (!$list_conn->connect_error) {
                 }
                 fclose($handle);
                 $toast_msg = "$count Focus List entr" . ($count === 1 ? 'y' : 'ies') . " imported.";
+                log_activity($list_conn, 'list_csv_imported', 'Imported ' . $count . ' Focus List entries from CSV');
                 if ($duplicate_count > 0 || $invalid_lrn_count > 0 || $student_duplicate_count > 0) {
                     $toast_msg .= " Skipped $duplicate_count duplicate(s), $student_duplicate_count existing student LRN row(s), and $invalid_lrn_count invalid LRN row(s).";
                 }

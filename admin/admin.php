@@ -28,17 +28,26 @@ if (isset($_GET['keepalive'])) {
 $_sv_conn = db_connect();
 $_admin_school_logo = null;
 if (!$_sv_conn->connect_error) {
-    $_sv_stmt = $_sv_conn->prepare("SELECT id, role FROM users WHERE id = ? LIMIT 1");
+    $_sv_stmt = $_sv_conn->prepare("SELECT u.id, u.roles, u.is_admin, u.full_name, u.status, c.section_name AS adviser_section, c.id AS adviser_classroom_id FROM users u LEFT JOIN classrooms c ON c.adviser_id = u.id WHERE u.id = ? LIMIT 1");
     if ($_sv_stmt) {
         $_sv_stmt->bind_param("i", $_SESSION['user_id']);
         $_sv_stmt->execute();
         $_sv_result = $_sv_stmt->get_result()->fetch_assoc();
         $_sv_stmt->close();
-        if (!$_sv_result) {
+        if (!$_sv_result || ($_sv_result['status'] ?? 'active') === 'disabled') {
             session_destroy();
             ems2_login_redirect();
         }
-        $_SESSION['role'] = $_sv_result['role'];
+        // Sync session with DB on every request
+        $_SESSION['roles']     = $_sv_result['roles'] ?? '';
+        $_SESSION['is_admin']  = (int)($_sv_result['is_admin'] ?? 0);
+        $_SESSION['full_name'] = $_sv_result['full_name'] ?? $_SESSION['username'];
+        $_SESSION['adviser_section']      = $_sv_result['adviser_section'] ?? null;
+        $_SESSION['adviser_classroom_id'] = $_sv_result['adviser_classroom_id'] ?? null;
+        // Backward compat
+        $is_admin_flag = (int)($_sv_result['is_admin'] ?? 0);
+        $roles_str = trim($_sv_result['roles'] ?? '');
+        $_SESSION['role'] = $is_admin_flag ? 'admin' : ($roles_str ?: 'faculty');
     }
     // Load school logo for sidebar
     $_logo_res = $_sv_conn->query("SELECT setting_value FROM system_settings WHERE setting_key='school_logo' LIMIT 1");
@@ -48,23 +57,22 @@ if (!$_sv_conn->connect_error) {
     $_sv_conn->close();
 }
 $loggedIn = true;
-$userRole = $_SESSION['role'] ?? 'admin';
+$userRole = $_SESSION['role'] ?? 'faculty';
 $username = $_SESSION['username'] ?? 'User';
+$userRolesStr = $_SESSION['roles'] ?? '';
+$userRolesArr = array_filter(array_map('trim', explode(',', $userRolesStr)));
+$isAdmin = (int)($_SESSION['is_admin'] ?? 0);
+$isAdviser = !empty($_SESSION['adviser_section']);
 
 
 // Simple routing logic
 $page = isset($_GET['page']) ? $_GET['page'] : 'dashboard';
 $page_title = ucfirst($page);
 
-// Whitelist of allowed pages based on role
-if ($userRole === 'evaluator') {
-    $allowed_pages = ['dashboard', 'student', 'evaluation'];
-} elseif ($userRole === 'encoder') {
-    $allowed_pages = ['dashboard', 'student', 'encode', 'classroom'];
-} elseif ($userRole === 'adviser') {
-    $allowed_pages = ['dashboard', 'student', 'classroom'];
-} else {
-    // Admin or default
+// Build allowed pages from combined roles
+$allowed_pages = ['dashboard', 'student']; // everyone gets these
+
+if ($isAdmin) {
     $allowed_pages = [
         'dashboard', 
         'student', 
@@ -76,6 +84,21 @@ if ($userRole === 'evaluator') {
         'logs', 
         'system_settings'
     ];
+} else {
+    if (in_array('evaluator', $userRolesArr)) {
+        $allowed_pages[] = 'evaluation';
+    }
+    if (in_array('encoder', $userRolesArr)) {
+        $allowed_pages[] = 'encode';
+        if (!in_array('classroom', $allowed_pages)) $allowed_pages[] = 'classroom';
+    }
+    if (in_array('registrar', $userRolesArr)) {
+        if (!in_array('list', $allowed_pages)) $allowed_pages[] = 'list';
+        if (!in_array('classroom', $allowed_pages)) $allowed_pages[] = 'classroom';
+    }
+    if ($isAdviser) {
+        if (!in_array('classroom', $allowed_pages)) $allowed_pages[] = 'classroom';
+    }
 }
 
 // Redirect back to dashboard if trying to access unauthorized page

@@ -3,6 +3,7 @@
 
 require_once __DIR__ . '/pathway_strand_catalog.php';
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/activity_log.php';
 $conn = db_connect();
 
 function post_value($key, $default = null) {
@@ -246,6 +247,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt->bind_param($types, ...$params);
 
     if ($stmt->execute()) {
+        // Log public enrollment (no session/user)
+        log_activity($conn, 'student_enrolled', 'Public enrollment: ' . $_POST['last_name'] . ', ' . $_POST['first_name'] . ' (LRN: ' . $_POST['lrn'] . ', ' . $grade_level . ')', 'student', null);
+
         $clean_lrn = htmlspecialchars($_POST['lrn']);
         echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Enrollment Success</title><style>';
         echo 'body{margin:0;font-family:Outfit,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:linear-gradient(135deg,#f8fafc 0%,#eef2ff 100%);color:#1f2937;}';

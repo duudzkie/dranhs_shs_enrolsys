@@ -45,9 +45,9 @@ if (!$row) {
 $classroom = null;
 if (!empty($row['assigned_section'])) {
     $cs = $conn->prepare("
-        SELECT c.adviser_name, c.group_chat_url, a.avatar
+        SELECT c.adviser_name, c.group_chat_url, u.avatar
         FROM classrooms c
-        LEFT JOIN advisers_accounts a ON a.id = c.adviser_id
+        LEFT JOIN users u ON u.id = c.adviser_id
         WHERE c.section_name = ?
         LIMIT 1
     ");

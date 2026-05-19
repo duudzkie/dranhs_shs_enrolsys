@@ -20,7 +20,7 @@ $conn = db_connect();
 // Fetch classroom info
 $cr = null;
 if ($classroom_id) {
-    $s = $conn->prepare("SELECT c.*, a.name AS adviser_name_full FROM classrooms c LEFT JOIN advisers_accounts a ON a.id = c.adviser_id WHERE c.id = ? LIMIT 1");
+    $s = $conn->prepare("SELECT c.*, u.full_name AS adviser_name_full FROM classrooms c LEFT JOIN users u ON u.id = c.adviser_id WHERE c.id = ? LIMIT 1");
     $s->bind_param("i", $classroom_id);
     $s->execute();
     $cr = $s->get_result()->fetch_assoc();

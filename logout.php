@@ -1,6 +1,16 @@
 <?php
 require_once __DIR__ . '/session.php';
 ems2_session_start();
+require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/activity_log.php';
+
+// Log logout before clearing session
+$_logout_conn = db_connect();
+if (!$_logout_conn->connect_error) {
+    $timeout = isset($_GET['timeout']) ? ' (session timeout)' : '';
+    log_activity($_logout_conn, 'logout', 'User logged out' . $timeout);
+    $_logout_conn->close();
+}
 
 // Clear session data
 $_SESSION = [];

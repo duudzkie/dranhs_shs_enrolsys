@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../pathway_strand_catalog.php';
 require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/../activity_log.php';
 
 $conn = db_connect();
 
@@ -79,6 +80,10 @@ if ($conn->connect_error) {
             $stmt = $conn->prepare("UPDATE students SET enrollment_status='enrolled', assigned_section=? WHERE id=?");
             if ($stmt) { $stmt->bind_param("si",$section,$sid); $stmt->execute(); $stmt->close(); }
             $toast_msg = 'enrolled';
+
+            // Log encoding
+            $log_name = isset($stu) ? trim(($stu['last_name']??'') . ', ' . ($stu['first_name']??'')) : 'ID#' . $sid;
+            log_activity($conn, 'student_encoded', 'Encoded student: ' . $log_name . ' → Section: ' . $section, 'student', $sid);
         }
     }
 

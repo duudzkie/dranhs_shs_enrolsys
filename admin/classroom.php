@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/../pathway_strand_catalog.php';
 require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/../activity_log.php';
 
 $conn = db_connect();
 
@@ -66,7 +67,7 @@ if ($conn->connect_error) {
         $sec_res->close();
     }
 
-    $adv_res = $conn->query("SELECT id, name, avatar FROM advisers_accounts ORDER BY name ASC");
+    $adv_res = $conn->query("SELECT id, full_name AS name, avatar FROM users WHERE status='active' ORDER BY full_name ASC");
     if ($adv_res) {
         while ($adv = $adv_res->fetch_assoc()) $advisers[] = $adv;
         $adv_res->close();
@@ -83,7 +84,7 @@ if ($conn->connect_error) {
             $cap = (int)($_POST['max_capacity'] ?? 40);
             $adviser_name = '';
             if ($adviser_id > 0) {
-                $adv_stmt = $conn->prepare("SELECT name FROM advisers_accounts WHERE id = ?");
+                $adv_stmt = $conn->prepare("SELECT full_name AS name FROM users WHERE id = ?");
                 if ($adv_stmt) {
                     $adv_stmt->bind_param("i", $adviser_id);
                     $adv_stmt->execute();
@@ -115,8 +116,9 @@ if ($conn->connect_error) {
 
             if ($gl && $sec && $adviser_id > 0 && $adviser_name !== '' && !$section_locked && !$adviser_locked) {
                 $stmt = $conn->prepare("INSERT INTO classrooms (grade_level, track, pathway_strand, section_name, adviser_id, adviser_name, max_capacity) VALUES (?,?,?,?,?,?,?)");
-                if ($stmt) { $stmt->bind_param("ssssisi", $gl, $tr, $ps, $sec, $adviser_id, $adviser_name, $cap); $stmt->execute(); $stmt->close(); }
+                if ($stmt) { $stmt->bind_param("ssssisi", $gl, $tr, $ps, $sec, $adviser_id, $adviser_name, $cap); $stmt->execute(); $new_cr_id = $conn->insert_id; $stmt->close(); }
                 $toast_message = 'Classroom added successfully.';
+                log_activity($conn, 'classroom_added', 'Added classroom: ' . $sec . ' (' . $gl . ', ' . $adviser_name . ')', 'classroom', $new_cr_id ?? null);
             } else {
                 $toast_message = $section_locked
                     ? 'Selected section is already locked to another classroom.'
@@ -140,7 +142,7 @@ if ($conn->connect_error) {
             if ($ok && $cid > 0) {
                 $adviser_name = null;
                 if ($adviser_id > 0) {
-                    $adv_stmt = $conn->prepare("SELECT name FROM advisers_accounts WHERE id = ? LIMIT 1");
+                    $adv_stmt = $conn->prepare("SELECT full_name AS name FROM users WHERE id = ? LIMIT 1");
                     if ($adv_stmt) {
                         $adv_stmt->bind_param("i", $adviser_id);
                         $adv_stmt->execute();
@@ -168,6 +170,7 @@ if ($conn->connect_error) {
                     $stmt = $conn->prepare("UPDATE classrooms SET adviser_id = ?, adviser_name = ?, max_capacity = ? WHERE id = ?");
                     if ($stmt) { $stmt->bind_param("isii", $adviser_id, $adviser_name, $cap, $cid); $stmt->execute(); $stmt->close(); }
                     $toast_message = 'Classroom updated successfully.';
+                    log_activity($conn, 'classroom_updated', 'Updated classroom ID#' . $cid . ' (capacity: ' . $cap . ', adviser: ' . ($adviser_name ?? 'none') . ')', 'classroom', $cid);
                 }
             } else {
                 $toast_message = 'Incorrect password. Classroom was not updated.';
@@ -186,6 +189,7 @@ if ($conn->connect_error) {
                 $stmt = $conn->prepare("DELETE FROM classrooms WHERE id=?");
                 if ($stmt) { $stmt->bind_param("i",$cid); $stmt->execute(); $stmt->close(); }
                 $toast_message = 'Classroom deleted.';
+                log_activity($conn, 'classroom_deleted', 'Deleted classroom ID#' . $cid, 'classroom', $cid);
             } else {
                 $toast_message = 'Incorrect password. Classroom not deleted.';
                 $toast_type = 'error';
@@ -259,6 +263,7 @@ if ($conn->connect_error) {
                                         }
                                         
                                         $toast_message = 'Student reassigned successfully to ' . htmlspecialchars($new_section) . ($new_pathway !== '' ? ' and pathway/strand updated' : '') . '.';
+                                        log_activity($conn, 'student_reassigned', 'Reassigned student ID#' . $student_id . ' to section: ' . $new_section, 'student', $student_id);
                                     }
                                 }
                             } else {
@@ -310,6 +315,7 @@ if ($conn->connect_error) {
                     $stmt->close();
                 }
                 $toast_message = 'Student has been withdrawn successfully.';
+                log_activity($conn, 'student_withdrawn', 'Withdrew student ID#' . $student_id . ' from classroom page', 'student', $student_id);
             } else {
                 $toast_message = 'Incorrect password. Withdrawal was not authorized.';
                 $toast_type = 'error';
@@ -318,12 +324,12 @@ if ($conn->connect_error) {
     }
 
     if ($isAdviser && $adviserSection) {
-        $res = $conn->prepare("SELECT c.*, a.avatar AS adviser_avatar FROM classrooms c LEFT JOIN advisers_accounts a ON a.id = c.adviser_id WHERE c.section_name = ? ORDER BY c.section_name ASC");
+        $res = $conn->prepare("SELECT c.*, u.avatar AS adviser_avatar FROM classrooms c LEFT JOIN users u ON u.id = c.adviser_id WHERE c.section_name = ? ORDER BY c.section_name ASC");
         $res->bind_param("s", $adviserSection);
         $res->execute();
         $res = $res->get_result();
     } else {
-        $res = $conn->query("SELECT c.*, a.avatar AS adviser_avatar FROM classrooms c LEFT JOIN advisers_accounts a ON a.id = c.adviser_id ORDER BY c.grade_level DESC, c.section_name ASC");
+        $res = $conn->query("SELECT c.*, u.avatar AS adviser_avatar FROM classrooms c LEFT JOIN users u ON u.id = c.adviser_id ORDER BY c.grade_level DESC, c.section_name ASC");
     }
     if ($res) { while ($row = $res->fetch_assoc()) $classrooms[] = $row; $res->close(); }
     // Enrolled count per classroom section

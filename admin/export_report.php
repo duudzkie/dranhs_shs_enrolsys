@@ -4,6 +4,7 @@ ems2_session_start();
 if (!isset($_SESSION['user_id'])||!isset($_SESSION['logged_in'])||$_SESSION['logged_in']!==true){ems2_login_redirect();}
 require_once __DIR__.'/../pathway_strand_catalog.php';
 require_once __DIR__ . '/../db.php';
+require_once __DIR__ . '/../activity_log.php';
 
 $conn = db_connect();
 
@@ -12,6 +13,10 @@ $current_sy=($sy_r&&$r=$sy_r->fetch_assoc())?$r['setting_value']:'';
 $w=$current_sy?" AND school_year='".$conn->real_escape_string($current_sy)."'":'';
 
 $report=$_GET['report']??'';
+
+if ($report !== '') {
+    log_activity($conn, 'report_exported', 'Exported report: ' . $report);
+}
 
 // ── Simple XLSX Writer ──
 class SimpleXLSX {
