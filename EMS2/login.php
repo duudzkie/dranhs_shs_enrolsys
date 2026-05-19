@@ -1,6 +1,13 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
+require_once __DIR__ . '/session.php';
+ems2_session_start();
 require_once __DIR__ . '/db.php';
+
+// Login form lives on index.php; this script only handles POST authentication.
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    $query = $_SERVER['QUERY_STRING'] ?? '';
+    ems2_login_redirect($query);
+}
 
 // Only auto-redirect if session is fully valid
 if (isset($_SESSION['user_id']) && isset($_SESSION['logged_in']) && $_SESSION['logged_in'] === true) {
@@ -20,7 +27,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['logged_in']) && $_SESSION['l
     }
     // Invalid session — destroy and continue to login form
     session_destroy();
-    session_start();
+    ems2_session_start();
 }
 
 $error = '';
@@ -43,6 +50,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['username'] = $user['username'];
             $_SESSION['role'] = $user['role'];
             $_SESSION['logged_in'] = true;
+            session_regenerate_id(true);
+            $_SESSION['_last_activity'] = time();
 
             // If adviser, store their linked adviser_id and section
             if ($user['role'] === 'adviser') {

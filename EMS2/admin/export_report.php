@@ -1,6 +1,7 @@
 <?php
-session_start();
-if (!isset($_SESSION['user_id'])||!isset($_SESSION['logged_in'])||$_SESSION['logged_in']!==true){header('Location:../login.php');exit;}
+require_once __DIR__ . '/../session.php';
+ems2_session_start();
+if (!isset($_SESSION['user_id'])||!isset($_SESSION['logged_in'])||$_SESSION['logged_in']!==true){ems2_login_redirect();}
 require_once __DIR__.'/../pathway_strand_catalog.php';
 require_once __DIR__ . '/../db.php';
 

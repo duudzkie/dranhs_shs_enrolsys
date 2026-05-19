@@ -1,11 +1,11 @@
 <?php
 ob_start();
-if (session_status() === PHP_SESSION_NONE) session_start();
+require_once __DIR__ . '/../session.php';
+ems2_session_start();
 require_once __DIR__ . '/../db.php';
 // Check if user is actually logged in — also verify user still exists in DB
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-    header('Location: ../login.php');
-    exit;
+    ems2_login_redirect();
 }
 
 // ── Auto session timeout: 5 minutes of inactivity ────────────────────────────
@@ -14,8 +14,7 @@ if (isset($_SESSION['_last_activity'])) {
     if (time() - $_SESSION['_last_activity'] > SESSION_TIMEOUT) {
         session_unset();
         session_destroy();
-        header('Location: ../login.php?timeout=1');
-        exit;
+        ems2_login_redirect('timeout=1');
     }
 }
 $_SESSION['_last_activity'] = time();
@@ -37,8 +36,7 @@ if (!$_sv_conn->connect_error) {
         $_sv_stmt->close();
         if (!$_sv_result) {
             session_destroy();
-            header('Location: ../login.php');
-            exit;
+            ems2_login_redirect();
         }
         $_SESSION['role'] = $_sv_result['role'];
     }
