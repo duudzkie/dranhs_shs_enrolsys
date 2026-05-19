@@ -316,39 +316,19 @@ foreach ($pathways_by_track as $track => $items) {
                 </div>
 
                 <div class="flex-1 flex flex-col gap-6">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
-                        <!-- Careers Box -->
-                        <div class="bg-white border border-slate-200 rounded-2xl p-5 lg:p-6 shadow-sm">
-                            <h3 class="text-xs font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
-                                Possible Careers
-                            </h3>
-                            <ul id="detail-careers" class="text-slate-700 font-bold text-sm lg:text-base leading-snug space-y-2 list-disc pl-4 marker:text-slate-300">
-                                <!-- JS Injection -->
-                            </ul>
-                        </div>
-                        <!-- Subjects Box -->
-                        <div class="bg-white border border-slate-200 rounded-2xl p-5 lg:p-6 shadow-sm">
-                            <h3 id="detail-subjects-title" class="text-xs font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
-                                Grade 11 Electives
-                            </h3>
-                            <ul id="detail-subjects" class="text-slate-700 font-bold text-sm lg:text-base leading-snug space-y-2 list-disc pl-4 marker:text-slate-300">
-                                <!-- JS Injection -->
-                            </ul>
-                        </div>
-                    </div>
-                    
-                    <!-- Call to Action -->
-                    <div class="text-center my-4">
-                        <button id="btn-continue-enrollment" class="bg-dranhs-dark hover:bg-black text-white px-10 py-3.5 w-full sm:w-auto mx-auto rounded-full font-black text-sm transition-transform hover:-translate-y-1 shadow-lg hover:shadow-xl uppercase tracking-widest cursor-pointer inline-flex justify-center items-center gap-2">
-                            CONTINUE ENROLLMENT 
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-                        </button>
+                    <!-- Careers Box -->
+                    <div class="bg-white border border-slate-200 rounded-2xl p-5 lg:p-6 shadow-sm">
+                        <h3 class="text-xs font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                            Possible Careers
+                        </h3>
+                        <ul id="detail-careers" class="text-slate-700 font-bold text-sm lg:text-base leading-snug space-y-2 list-disc pl-4 marker:text-slate-300">
+                            <!-- JS Injection -->
+                        </ul>
                     </div>
 
                     <!-- Universal Core Footer -->
-                    <div class="mt-auto bg-slate-100 rounded-2xl p-5 border border-slate-200/60">
+                    <div class="bg-slate-100 rounded-2xl p-5 border border-slate-200/60">
                         <h4 class="text-[0.65rem] font-bold uppercase text-slate-500 tracking-widest text-center mb-3">Core Subjects</h4>
                         <div class="flex flex-wrap justify-center gap-2 text-[0.65rem] lg:text-xs font-semibold text-slate-600">
                             <span class="bg-white px-3 py-1.5 rounded-md shadow-sm border border-slate-200">Effective Communication</span>
@@ -357,6 +337,25 @@ foreach ($pathways_by_track as $track => $items) {
                             <span class="bg-white px-3 py-1.5 rounded-md shadow-sm border border-slate-200">Life & Career Skills</span>
                             <span class="bg-white px-3 py-1.5 rounded-md shadow-sm border border-slate-200">Kasaysayan at Lipunang Pilipino</span>
                         </div>
+                    </div>
+
+                    <!-- Subjects Box -->
+                    <div class="bg-white border border-slate-200 rounded-2xl p-5 lg:p-6 shadow-sm">
+                        <h3 id="detail-subjects-title" class="text-xs font-black uppercase text-slate-400 tracking-widest mb-3 flex items-center gap-2">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+                            Grade 11 Electives
+                        </h3>
+                        <ul id="detail-subjects" class="text-slate-700 font-bold text-sm lg:text-base leading-snug space-y-2 list-disc pl-4 marker:text-slate-300">
+                            <!-- JS Injection -->
+                        </ul>
+                    </div>
+                    
+                    <!-- Call to Action -->
+                    <div class="text-center mt-auto pb-4">
+                        <button id="btn-continue-enrollment" class="bg-dranhs-dark hover:bg-black text-white px-10 py-3.5 w-full sm:w-auto mx-auto rounded-full font-black text-sm transition-transform hover:-translate-y-1 shadow-lg hover:shadow-xl uppercase tracking-widest cursor-pointer inline-flex justify-center items-center gap-2">
+                            CONTINUE ENROLLMENT 
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                        </button>
                     </div>
                 </div>
             </div>
