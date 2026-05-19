@@ -185,6 +185,14 @@ if (!$list_conn->connect_error) {
         'added_by' => "INT NULL AFTER `school_year`",
     ]);
 
+    $list_conn->query("CREATE TABLE IF NOT EXISTS g11_completer_sections (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        school_year VARCHAR(20) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )");
+
+
     if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['list_action'])) {
         $uid = (int)($_SESSION['user_id'] ?? 0);
         $action = $_POST['list_action'];
@@ -344,6 +352,33 @@ if (!$list_conn->connect_error) {
             }
         }
 
+        } elseif ($action === 'add_g11_section') {
+            $sec_name = trim($_POST['section_name']??'');
+            if ($sec_name) {
+                // Check duplicate
+                $chk = $list_conn->prepare("SELECT id FROM g11_completer_sections WHERE school_year = ? AND LOWER(name) = LOWER(?) LIMIT 1");
+                $chk->bind_param("ss", $school_year, $sec_name);
+                $chk->execute();
+                $chk->store_result();
+                if ($chk->num_rows > 0) {
+                    $toast_msg = 'Section already exists for this school year.';
+                    $toast_type = 'error';
+                } else {
+                    $s = $list_conn->prepare("INSERT INTO g11_completer_sections (name, school_year) VALUES (?, ?)");
+                    if ($s) { $s->bind_param("ss", $sec_name, $school_year); $s->execute(); $s->close(); }
+                    $toast_msg = 'Completer section added.';
+                    log_activity($list_conn, 'list_entry_added', "Added G11 completer section: {$sec_name}");
+                }
+                $chk->close();
+            }
+        } elseif ($action === 'delete_g11_section') {
+            $id = (int)($_POST['section_id']??0);
+            $s = $list_conn->prepare("DELETE FROM g11_completer_sections WHERE id=?");
+            if ($s) { $s->bind_param("i",$id); $s->execute(); $s->close(); }
+            $toast_msg = 'Completer section deleted.'; $toast_type = 'error';
+            log_activity($list_conn, 'list_entry_deleted', 'Deleted G11 completer section ID#' . $id);
+        }
+
         // ---- WATCHLIST ----
         elseif ($action === 'add_watch') {
             $ln = trim($_POST['last_name']??''); $fn = trim($_POST['first_name']??'');
@@ -405,8 +440,19 @@ if (!$list_conn->connect_error) {
         }
     }
 
-    $r = $list_conn->query("SELECT name FROM add_sections WHERE grade_level = '11' ORDER BY name ASC");
-    if ($r) { while ($row=$r->fetch_assoc()) $g11_sections[] = $row['name']; $r->close(); }
+    $g11_sections = [];
+    $g11_section_records = [];
+    $r = $list_conn->prepare("SELECT id, name FROM g11_completer_sections WHERE school_year = ? ORDER BY name ASC");
+    if ($r) { 
+        $r->bind_param("s", $school_year);
+        $r->execute();
+        $res = $r->get_result();
+        while ($row=$res->fetch_assoc()) {
+            $g11_section_records[] = $row;
+            $g11_sections[] = $row['name'];
+        }
+        $r->close(); 
+    }
 
     // Fetch all
     $stem_stmt = $list_conn->prepare("SELECT * FROM stem_qualifiers WHERE school_year = ? ORDER BY pathway_cluster, last_name, first_name");
@@ -655,6 +701,29 @@ foreach ($g11_rows as $row) {
                                 <input type="file" name="csv_file" accept=".csv" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm bg-white" required>
                                 <button type="submit" class="w-full rounded-xl border border-dranhs-green text-dranhs-green py-3 text-sm font-bold hover:bg-emerald-50 transition-colors">Upload G11 CSV</button>
                             </form>
+                        </div>
+                        <div class="mt-6 pt-5 border-t border-slate-200">
+                            <h4 class="text-sm font-black uppercase tracking-wider text-slate-600 mb-3">Manage Completer Sections</h4>
+                            <form method="POST" class="flex gap-2">
+                                <input type="hidden" name="list_action" value="add_g11_section">
+                                <input type="text" name="section_name" class="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm bg-white" placeholder="Section Name" required>
+                                <button type="submit" class="shrink-0 rounded-xl bg-blue-600 text-white px-4 py-2 text-sm font-bold hover:bg-blue-700 transition-colors">Add</button>
+                            </form>
+                            <div class="mt-4 flex flex-wrap gap-2">
+                                <?php foreach ($g11_section_records as $sec): ?>
+                                <div class="inline-flex items-center gap-1 bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold text-slate-600 shadow-sm">
+                                    <?php echo htmlspecialchars($sec['name']); ?>
+                                    <form method="POST" class="inline" onsubmit="return confirm('Delete this section?');">
+                                        <input type="hidden" name="list_action" value="delete_g11_section">
+                                        <input type="hidden" name="section_id" value="<?php echo (int)$sec['id']; ?>">
+                                        <button type="submit" class="text-red-400 hover:text-red-600 text-base leading-none ml-1">&times;</button>
+                                    </form>
+                                </div>
+                                <?php endforeach; ?>
+                                <?php if(empty($g11_section_records)): ?>
+                                <p class="text-xs text-slate-400">No historical sections added yet.</p>
+                                <?php endif; ?>
+                            </div>
                         </div>
                     </div>
                 </div>
