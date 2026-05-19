@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/session.php';
+ems2_session_start();
 require_once __DIR__ . '/db.php';
 $conn = db_connect();
 
