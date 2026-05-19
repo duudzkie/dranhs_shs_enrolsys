@@ -33,7 +33,10 @@ function ems2_session_start(): void
 
 function ems2_login_redirect(string $query = ''): void
 {
-    $url = 'index.php' . ($query !== '' ? '?' . ltrim($query, '?') : '');
+    // Determine if we are currently in a subdirectory (like admin/)
+    $in_admin = strpos($_SERVER['SCRIPT_NAME'], '/admin/') !== false;
+    $prefix = $in_admin ? '../' : '';
+    $url = $prefix . 'index.php' . ($query !== '' ? '?' . ltrim($query, '?') : '');
     header('Location: ' . $url);
     exit;
 }
