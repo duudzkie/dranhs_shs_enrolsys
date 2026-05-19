@@ -67,7 +67,7 @@ if ($conn->connect_error) {
         $sec_res->close();
     }
 
-    $adv_res = $conn->query("SELECT id, full_name AS name, avatar FROM users WHERE status='active' ORDER BY full_name ASC");
+    $adv_res = $conn->query("SELECT id, full_name AS name, avatar FROM users WHERE status='active' AND FIND_IN_SET('adviser', roles) > 0 ORDER BY full_name ASC");
     if ($adv_res) {
         while ($adv = $adv_res->fetch_assoc()) $advisers[] = $adv;
         $adv_res->close();

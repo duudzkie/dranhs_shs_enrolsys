@@ -53,28 +53,9 @@
             </div>
         </div>
 
-        <!-- Adviser Toggle -->
-        <div>
-            <label class="flex items-center gap-2 bg-pink-50 px-3 py-2 rounded-lg cursor-pointer hover:bg-pink-100 transition border border-transparent has-[:checked]:border-pink-400 w-fit">
-                <input type="checkbox" name="is_adviser" id="fm-is-adviser" value="1" class="accent-pink-500" onchange="toggleAdviserFields()"> <span class="text-sm font-bold text-pink-800">📚 Assign as Adviser</span>
-            </label>
-        </div>
-        <div id="fm-adviser-fields" class="hidden grid grid-cols-2 gap-4 bg-pink-50/50 p-4 rounded-xl border border-pink-200">
-            <div>
-                <label class="text-xs font-bold uppercase tracking-wider text-pink-600">Grade Level</label>
-                <select id="fm-adv-grade" class="form-input mt-1" onchange="filterSections()">
-                    <option value="">Select grade</option>
-                    <option value="Grade 11">Grade 11</option>
-                    <option value="Grade 12">Grade 12</option>
-                </select>
-            </div>
-            <div>
-                <label class="text-xs font-bold uppercase tracking-wider text-pink-600">Section</label>
-                <select name="adviser_classroom_id" id="fm-adv-section" class="form-input mt-1">
-                    <option value="">Select section</option>
-                </select>
-            </div>
-        </div>
+                <label class="flex items-center gap-2 bg-pink-50 px-3 py-2 rounded-lg cursor-pointer hover:bg-pink-100 transition border border-transparent has-[:checked]:border-pink-400">
+                    <input type="checkbox" name="roles[]" value="adviser" class="fm-role accent-pink-500"> <span class="text-sm font-bold text-pink-800">📚 Adviser</span>
+                </label>
 
         <div>
             <label class="text-xs font-bold uppercase tracking-wider text-slate-500">Profile Photo</label>
@@ -141,7 +122,6 @@
 </div>
 
 <script>
-const allClassrooms = <?php echo $classrooms_json; ?>;
 
 function closeAllModals(){
     document.getElementById('modal-bg').classList.add('hidden');
@@ -160,7 +140,6 @@ function openCreateModal(){
     document.getElementById('fm-target-id').value='';
     document.getElementById('fm-title').textContent='New Account';
     document.getElementById('fm-desc').textContent='Create a new faculty account.';
-    document.getElementById('fm-adviser-fields').classList.add('hidden');
     document.getElementById('fm-password').required=true;
     showModal('form-modal');
 }
@@ -181,15 +160,7 @@ function openEditModal(user, classrooms){
     // Set role checkboxes
     const roles=(user.roles||'').split(',');
     document.querySelectorAll('.fm-role').forEach(cb=>{cb.checked=roles.includes(cb.value);});
-    // Adviser
-    const isAdv=!!user.adviser_classroom_id;
-    document.getElementById('fm-is-adviser').checked=isAdv;
-    toggleAdviserFields();
-    if(isAdv){
-        document.getElementById('fm-adv-grade').value=user.adviser_grade_level||'';
-        filterSections();
-        setTimeout(()=>{document.getElementById('fm-adv-section').value=user.adviser_classroom_id||'';},50);
-    }
+
     showModal('form-modal');
 }
 
@@ -205,25 +176,6 @@ function openSendModal(id,name,email){
     showModal('send-modal');
 }
 
-function toggleAdviserFields(){
-    const show=document.getElementById('fm-is-adviser').checked;
-    document.getElementById('fm-adviser-fields').classList.toggle('hidden',!show);
-}
-
-function filterSections(){
-    const grade=document.getElementById('fm-adv-grade').value;
-    const sel=document.getElementById('fm-adv-section');
-    const currentAdvId=parseInt(document.getElementById('fm-target-id').value)||0;
-    sel.innerHTML='<option value="">Select section</option>';
-    allClassrooms.filter(c=>c.grade_level===grade).forEach(c=>{
-        const taken=c.adviser_id&&parseInt(c.adviser_id)!==currentAdvId;
-        const opt=document.createElement('option');
-        opt.value=c.id;
-        opt.textContent=c.section_name+(taken?' (assigned)':'');
-        if(taken)opt.disabled=true;
-        sel.appendChild(opt);
-    });
-}
 
 function genPass(){
     const chars='ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';

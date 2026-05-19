@@ -40,8 +40,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $is_admin  = isset($_POST['is_admin']) ? 1 : 0;
             $role_arr  = $_POST['roles'] ?? [];
             $roles_str = implode(',', array_filter($role_arr));
-            $is_adviser = isset($_POST['is_adviser']) ? 1 : 0;
-            $adv_classroom = (int)($_POST['adviser_classroom_id'] ?? 0);
 
             if ($full_name === '' || $username === '' || $password === '') {
                 $toast_message = 'Full name, username, and password are required.';
@@ -73,13 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $stmt->bind_param("ssssssi", $username, $email, $hashed, $full_name, $avatar_path, $roles_str, $is_admin);
                     if ($stmt->execute()) {
                         $new_id = $conn->insert_id;
-                        // Link as adviser if checked
-                        if ($is_adviser && $adv_classroom > 0) {
-                            $adv_upd = $conn->prepare("UPDATE classrooms SET adviser_id = ?, adviser_name = ? WHERE id = ?");
-                            $adv_upd->bind_param("isi", $new_id, $full_name, $adv_classroom);
-                            $adv_upd->execute();
-                            $adv_upd->close();
-                        }
+                        // Adviser linking is now exclusively handled on the Classroom page.
                         log_activity($conn, 'user_created', 'Created account: ' . $username . ' (' . $full_name . ')', 'user', $new_id);
                         $toast_message = 'Account created successfully.';
                         // Store for email send
@@ -106,8 +98,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             $is_admin  = isset($_POST['is_admin']) ? 1 : 0;
             $role_arr  = $_POST['roles'] ?? [];
             $roles_str = implode(',', array_filter($role_arr));
-            $is_adviser = isset($_POST['is_adviser']) ? 1 : 0;
-            $adv_classroom = (int)($_POST['adviser_classroom_id'] ?? 0);
 
             if ($target_id > 0 && $full_name !== '' && $username !== '') {
                 // Check duplicate (excluding self)
@@ -151,15 +141,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $stmt->execute();
                     $stmt->close();
 
-                    // Update adviser assignment
-                    // First remove from any classroom
-                    $conn->query("UPDATE classrooms SET adviser_id = NULL, adviser_name = NULL WHERE adviser_id = $target_id");
-                    // Then assign if checked
-                    if ($is_adviser && $adv_classroom > 0) {
-                        $adv_upd = $conn->prepare("UPDATE classrooms SET adviser_id = ?, adviser_name = ? WHERE id = ?");
-                        $adv_upd->bind_param("isi", $target_id, $full_name, $adv_classroom);
-                        $adv_upd->execute();
-                        $adv_upd->close();
+                    // If they lost the adviser role, unassign them from any classrooms
+                    if (strpos($roles_str, 'adviser') === false) {
+                        $conn->query("UPDATE classrooms SET adviser_id = NULL, adviser_name = NULL WHERE adviser_id = $target_id");
                     }
 
                     log_activity($conn, 'user_updated', 'Updated account: ' . $username, 'user', $target_id);
@@ -250,10 +234,4 @@ if ($userResult) {
     while ($row = $userResult->fetch_assoc()) $users[] = $row;
 }
 
-// Fetch classrooms for adviser assignment dropdown
-$classrooms = [];
-$cr_res = $conn->query("SELECT id, grade_level, section_name, adviser_id FROM classrooms ORDER BY grade_level, section_name");
-if ($cr_res) {
-    while ($row = $cr_res->fetch_assoc()) $classrooms[] = $row;
-}
-$classrooms_json = json_encode($classrooms);
+// Fetch classrooms for adviser assignment dropdown is no longer needed here
