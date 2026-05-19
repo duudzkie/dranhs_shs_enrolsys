@@ -220,6 +220,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $name = trim(strtoupper($_POST['name']));
             
             if (!empty($name)) {
+                if ($cat === 'faculty_advisers') {
                     // Faculty advisers now managed on Account page
                     $toast_message = 'Advisers are managed from the Accounts page.';
                     $toast_type = 'info';
