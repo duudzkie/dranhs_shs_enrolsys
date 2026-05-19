@@ -1,43 +1,59 @@
 <?php
-/**
- * Railway MySQL Setup Script
- * Run this once to initialize the database.
- * Safe to run multiple times — uses IF NOT EXISTS and ON DUPLICATE KEY.
- */
 
-require_once __DIR__ . '/config_db.php';
+declare(strict_types=1);
+
+require_once __DIR__ . '/db.php';
+
+$expectedKey = getenv('SETUP_DB_KEY');
+$providedKey = $_GET['key'] ?? '';
+
+if ($expectedKey === false || $expectedKey === '') {
+    http_response_code(503);
+    header('Content-Type: text/plain; charset=UTF-8');
+    echo "SETUP_DB_KEY is not configured.\n";
+    exit;
+}
+
+if (!hash_equals($expectedKey, (string) $providedKey)) {
+    http_response_code(403);
+    header('Content-Type: text/plain; charset=UTF-8');
+    echo "Forbidden.\n";
+    exit;
+}
+
+$schemaPath = __DIR__ . '/scripts/setup_schema.sql';
+if (!is_file($schemaPath)) {
+    http_response_code(500);
+    header('Content-Type: text/plain; charset=UTF-8');
+    echo "Schema file not found.\n";
+    exit;
+}
+
+$sql = file_get_contents($schemaPath);
+if ($sql === false) {
+    http_response_code(500);
+    header('Content-Type: text/plain; charset=UTF-8');
+    echo "Failed to read schema file.\n";
+    exit;
+}
+
+mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
 
 try {
-    $conn = getMySQLiConnection();
+    $conn = db_connect();
+    $conn->multi_query($sql);
 
-    // Run the complete schema (all tables + default users)
-    $sql = file_get_contents(__DIR__ . '/EMS2/scripts/setup_schema.sql');
-    if ($sql === false) {
-        echo "❌ Could not read setup_schema.sql\n";
-        exit(1);
-    }
-
-    if ($conn->multi_query($sql)) {
-        // Process all result sets from multi_query
-        do {
-            if ($result = $conn->store_result()) {
-                $result->free();
-            }
-        } while ($conn->next_result());
-
-        if ($conn->error) {
-            echo "⚠️ Warning: " . $conn->error . "\n";
+    do {
+        if ($result = $conn->store_result()) {
+            $result->free();
         }
+    } while ($conn->more_results() && $conn->next_result());
 
-        echo "✅ MySQL database initialized successfully!\n";
-        echo "Database: " . DB_NAME . "\n";
-        echo "Host: " . DB_HOST . "\n";
-    } else {
-        echo "❌ Error: " . $conn->error . "\n";
-    }
-    $conn->close();
-    
-} catch (Exception $e) {
-    echo "❌ Error: " . $e->getMessage() . "\n";
-    exit(1);
+    header('Content-Type: text/plain; charset=UTF-8');
+    echo "Database schema initialized successfully.\n";
+} catch (Throwable $e) {
+    http_response_code(500);
+    header('Content-Type: text/plain; charset=UTF-8');
+    echo "Setup failed: " . $e->getMessage() . "\n";
+    exit;
 }

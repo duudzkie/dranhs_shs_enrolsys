@@ -1,137 +1,90 @@
+<?php
+require_once __DIR__ . '/session.php';
+ems2_session_start();
+
+require_once __DIR__ . '/db.php';
+$conn = db_connect();
+
+$enrollment_locked = false;
+$_theme = [];
+if (!$conn->connect_error) {
+    $res = $conn->query("SELECT setting_key, setting_value FROM system_settings WHERE setting_key IN ('enrollment_status','school_logo','background','deped_logo','division_logo')");
+    if ($res) {
+        while ($row = $res->fetch_assoc()) {
+            if ($row['setting_key'] === 'enrollment_status') {
+                $enrollment_locked = ($row['setting_value'] === 'locked');
+            } else {
+                $_theme[$row['setting_key']] = $row['setting_value'];
+            }
+        }
+    }
+}
+$_bg_image = !empty($_theme['background']) ? $_theme['background'] : null;
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <?php include 'components/main_head.php'; ?>
-    <title>DRANHS — Daniel R. Aguinaldo National High School</title>
-    <meta name="description" content="Official website of Daniel R. Aguinaldo National High School — Matina Crossing, Davao City.">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DRANHS SMARTENROLL</title>
+    <meta name="description" content="Forge your path to excellence at Davao's premier SHS community.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,700;0,900;1,800&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        heading: ['Montserrat', 'sans-serif'],
+                    },
+                    colors: {
+                        'dranhs-green': '#009b5a',
+                        'dranhs-dark': '#1c2434',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Only lock scrolling on larger screens where everything fits */
+        @media (min-width: 1024px) {
+            body.no-scroll { 
+                overflow: hidden;
+            }
+        }
+        .bg-school-pattern {
+            background-color: #f8fafc;
+            /* Placeholder pattern that gives a light textured feel like a washed out background image */
+            background-image: linear-gradient(rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.95)), url('data:image/svg+xml,%3Csvg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg"%3E%3Cg fill="none" fill-rule="evenodd"%3E%3Cg fill="%23cbd5e1" fill-opacity="0.3"%3E%3Cpath d="M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z"/%3E%3C/g%3E%3C/g%3E%3C/svg%3E');
+            background-size: cover;
+            background-position: center;
+        }
+    </style>
 </head>
-<body>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col no-scroll font-sans relative dark:bg-slate-900 dark:text-slate-100 transition-colors duration-300"
+    <?php if ($_bg_image): ?>
+    style="background-image: url('<?php echo htmlspecialchars($_bg_image); ?>'); background-size: cover; background-position: center; background-attachment: fixed;"
+    <?php endif; ?>>
 
-<?php include 'components/main_navbar.php'; ?>
+    <!-- Background overlay -->
+    <div class="absolute inset-0 z-[-1] <?php echo $_bg_image ? 'bg-white/80 dark:bg-slate-900/80' : 'bg-school-pattern'; ?>"></div>
 
-<!-- ═══════════════════════════════════════════════
-     CAROUSEL
-     ═══════════════════════════════════════════════ -->
-<div class="carousel" id="carousel">
-    <div class="carousel-track" id="carousel-track">
-        <div class="carousel-slide" style="background:url('https://images.unsplash.com/photo-1523050854058-8df90110c6f6?w=1400&q=80') center/cover;">
-            <div class="carousel-slide-content">
-                <span class="carousel-slide-tag">📢 Announcement</span>
-                <h2>Enrollment is Now Open for S.Y. 2026–2027</h2>
-                <p>Secure your slot today. Visit our online enrollment portal and start your journey with DRANHS.</p>
-            </div>
-        </div>
-        <div class="carousel-slide" style="background:url('https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?w=1400&q=80') center/cover;">
-            <div class="carousel-slide-content">
-                <span class="carousel-slide-tag">🏫 Campus Life</span>
-                <h2>A Community Built on Excellence</h2>
-                <p>Join a vibrant community of learners, educators, and leaders shaping the future of Davao.</p>
-            </div>
-        </div>
-        <div class="carousel-slide" style="background:url('https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=1400&q=80') center/cover;">
-            <div class="carousel-slide-content">
-                <span class="carousel-slide-tag">🏆 Achievements</span>
-                <h2>50+ Years of Academic Distinction</h2>
-                <p>Producing nationally competitive students in academics, sports, and the arts since 1973.</p>
-            </div>
-        </div>
-    </div>
-    <button class="carousel-btn carousel-btn--prev" id="carousel-prev" aria-label="Previous">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
-    </button>
-    <button class="carousel-btn carousel-btn--next" id="carousel-next" aria-label="Next">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-    </button>
-    <div class="carousel-dots" id="carousel-dots"></div>
-</div>
+    <!-- Include Navbar -->
+    <?php include 'components/navbar.php'; ?>
 
+    <!-- Include Main Hero Section -->
+    <?php include 'components/hero.php'; ?>
 
-<!-- ═══════════════════════════════════════════════
-     HERO
-     ═══════════════════════════════════════════════ -->
-<section class="hero" id="home" style="min-height: auto; padding: 60px 24px;">
-    <div class="hero-shapes"><div class="hero-shape"></div><div class="hero-shape"></div><div class="hero-shape"></div></div>
-    <div class="hero-content">
-        <div class="hero-badge"><span class="hero-badge-dot"></span> Official School Website</div>
-        <h1 class="hero-title">Daniel R. Aguinaldo<br><span class="hero-title-accent">National High School</span></h1>
-        <p class="hero-subtitle">Empowering the next generation of leaders. Soar high with Davao's most dynamic and innovative senior high school community.</p>
-        <div class="hero-actions">
-            <a href="main_portal.php" class="btn btn-primary">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-                Student Portal
-            </a>
-            <a href="main_about.php" class="btn btn-outline">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                Learn More
-            </a>
-        </div>
-    </div>
-</section>
+    <!-- Include Footer -->
+    <?php include 'components/footer.php'; ?>
 
+    <!-- Include Enrollment Modal -->
+    <?php include 'components/enroll_modal.php'; ?>
 
-<!-- ═══════════════════════════════════════════════
-     STATS BAR
-     ═══════════════════════════════════════════════ -->
-<div class="stats-bar">
-    <div class="container">
-        <div class="stats-grid">
-            <div class="stat-item reveal"><div class="stat-number" data-count="5000" data-suffix="+">0</div><div class="stat-label">Students Enrolled</div></div>
-            <div class="stat-item reveal"><div class="stat-number" data-count="200" data-suffix="+">0</div><div class="stat-label">Faculty Members</div></div>
-            <div class="stat-item reveal"><div class="stat-number" data-count="15">0</div><div class="stat-label">SHS Strands</div></div>
-            <div class="stat-item reveal"><div class="stat-number" data-count="50" data-suffix="+">0</div><div class="stat-label">Years of Excellence</div></div>
-        </div>
-    </div>
-</div>
-
-
-<!-- ═══════════════════════════════════════════════
-     QUICK FEATURES
-     ═══════════════════════════════════════════════ -->
-<section class="section">
-    <div class="container">
-        <div class="section-header reveal">
-            <span class="section-tag">Why DRANHS</span>
-            <h2 class="section-title">Shaping Tomorrow's Leaders</h2>
-        </div>
-        <div class="features-grid">
-            <div class="feature-card reveal">
-                <div class="feature-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 14l9-5-9-5-9 5 9 5z"/><path d="M12 14l6.16-3.422A12.083 12.083 0 0118.825 17.057 11.952 11.952 0 0112 20.055a11.952 11.952 0 01-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z"/></svg>
-                </div>
-                <h3>Academic Excellence</h3>
-                <p>A rigorous curriculum preparing students for college and career success across all SHS strands.</p>
-            </div>
-            <div class="feature-card reveal">
-                <div class="feature-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                </div>
-                <h3>Diverse Community</h3>
-                <p>A vibrant learning community embracing inclusivity, mutual respect, and collaborative growth.</p>
-            </div>
-            <div class="feature-card reveal">
-                <div class="feature-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                </div>
-                <h3>Holistic Development</h3>
-                <p>Leadership, creativity, and values nurtured through co-curricular activities and student orgs.</p>
-            </div>
-        </div>
-    </div>
-</section>
-
-
-<!-- ═══════════════════════════════════════════════
-     CTA
-     ═══════════════════════════════════════════════ -->
-<section class="cta-section">
-    <div class="container reveal">
-        <h2>Ready to Begin Your Journey?</h2>
-        <p>Explore our student portal for enrollment, grade viewing, learning resources, and more.</p>
-        <a href="main_portal.php" class="btn btn-primary" style="font-size:1rem; padding:16px 36px;">Go to Student Portal</a>
-    </div>
-</section>
-
-<?php include 'components/main_footer.php'; ?>
-<script src="main.js"></script>
+    <script src="script.js?v=<?php echo time(); ?>"></script>
 </body>
 </html>

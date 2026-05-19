@@ -1,95 +1,36 @@
-FROM php:8.1-apache
+FROM dunglas/frankenphp:php8.4-bookworm
 
-# Install system dependencies and PHP extensions
-RUN apt-get update && apt-get install -y \
-    git \
-    curl \
+# Install PHP extensions required by the app.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libpng-dev \
-    libonig-dev \
-    libxml2-dev \
+    libjpeg62-turbo-dev \
+    libfreetype6-dev \
     libzip-dev \
-    zip \
     unzip \
-    && docker-php-ext-install mysqli pdo pdo_mysql mbstring exif pcntl bcmath gd zip \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j"$(nproc)" gd zip mysqli pdo pdo_mysql \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Enable Apache mod_rewrite
-RUN a2enmod rewrite
+# Install Composer from the official image.
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Set working directory
-WORKDIR /var/www/html
+WORKDIR /app
 
-# Remove default Apache files and copy application
-RUN rm -rf /var/www/html/*
-COPY . /var/www/html/
+# Install PHP dependencies before copying the full app for better layer caching.
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 
-# Configure Apache VirtualHost template to serve DRANHS portal
-RUN cat > /etc/apache2/sites-available/000-default.conf.template <<'EOF'
-<VirtualHost *:${PORT}>
-    ServerAdmin admin@dranhs.local
-    DocumentRoot /var/www/html
+# Copy the application code.
+COPY . .
 
-    <Directory /var/www/html>
-        Options -MultiViews +FollowSymLinks
-        AllowOverride All
-        Require all granted
-        
-        <IfModule mod_rewrite.c>
-            RewriteEngine On
-            RewriteBase /
-            RewriteCond %{REQUEST_FILENAME} !-f
-            RewriteCond %{REQUEST_FILENAME} !-d
-            RewriteRule ^ index.php [QSA,L]
-        </IfModule>
-    </Directory>
+# Ensure runtime directories exist and are writable by the web server user.
+RUN mkdir -p /app/uploads/advisers /app/uploads/id_photos /app/uploads/templates /app/uploads/theme \
+    && chown -R www-data:www-data /app/uploads \
+    && chmod -R 775 /app/uploads
 
-    <FilesMatch \.php$>
-        SetHandler application/x-httpd-php
-    </FilesMatch>
+ENV PORT=8080
+EXPOSE 8080
 
-    ErrorLog ${APACHE_LOG_DIR}/error.log
-    CustomLog ${APACHE_LOG_DIR}/access.log combined
-</VirtualHost>
-EOF
-
-# Create startup script that initializes DB then starts Apache
-RUN cat > /usr/local/bin/start.sh <<'SCRIPT'
-#!/bin/bash
-set -e
-
-PORT="${PORT:-80}"
-
-# Railway injects PORT at runtime, so Apache must be configured here instead of at build time.
-sed "s/\${PORT}/${PORT}/g" /etc/apache2/sites-available/000-default.conf.template > /etc/apache2/sites-available/000-default.conf
-cat > /etc/apache2/ports.conf <<EOF
-Listen ${PORT}
-
-<IfModule ssl_module>
-    Listen 443
-</IfModule>
-
-<IfModule mod_gnutls.c>
-    Listen 443
-</IfModule>
-EOF
-# Auto-initialize database on first boot (safe — uses IF NOT EXISTS)
-if [ -n "$MYSQLHOST" ]; then
-    echo "Railway MySQL detected. Running database setup..."
-    php /var/www/html/setup_db.php || echo "DB setup encountered an issue (may already be initialized)."
-fi
-# Start Apache
-exec apache2-foreground
-SCRIPT
-RUN chmod +x /usr/local/bin/start.sh
-
-# Set permissions
-RUN chown -R www-data:www-data /var/www/html \
-    && chmod -R 755 /var/www/html \
-    && chmod -R 775 /var/www/html/EMS2/uploads 2>/dev/null || true
-
-# Default PORT for local Docker (Railway overrides this)
-ENV PORT=80
-EXPOSE 80
-
-# Start via startup script
-CMD ["/usr/local/bin/start.sh"]
+# Railway provides PORT at runtime, so use a shell to expand it.
+CMD ["sh", "-c", "exec frankenphp php-server --root /app --listen :${PORT}"]

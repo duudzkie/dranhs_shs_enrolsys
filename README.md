@@ -1,48 +1,22 @@
-# DRANHS Portal
+# DRANHS SMARTENROLL (EMS2)
 
-A dynamic web portal for Daniel R. Aguinaldo National High School (DRANHS) built with PHP, HTML, CSS, and JavaScript.
+Senior High School enrollment system for Daniel R. Aguinaldo National High School.
 
-## Features
+## Local development (XAMPP)
 
-- **Main Portal**: Landing page with navigation to various sections
-- **Student Portal**: Enrollment system (EMS2)
-- **Admin Panel**: Edit page content dynamically
-- **Responsive Design**: Works on desktop and mobile
+1. Place this project under your web root (e.g. `htdocs/dranhs-portal/EMS2`).
+2. Start Apache and MySQL.
+3. Import `scripts/setup_schema.sql` and `scripts/setup_users.sql`.
+4. Configure database via environment variables or defaults in `db.php`.
+5. Open `http://localhost/.../EMS2/` in your browser.
 
-## Local Development
+## Railway deployment
 
-1. Install XAMPP or similar PHP server
-2. Clone this repository to `htdocs` folder
-3. Start Apache and MySQL
-4. Access at `http://localhost/dranhs-portal`
+1. Connect this repository to Railway.
+2. Set **Root Directory** to `/` (repository root).
+3. Railway uses the `Dockerfile` (FrankenPHP).
+4. Set MySQL variables: `MYSQLHOST`, `MYSQLPORT`, `MYSQLUSER`, `MYSQLPASSWORD`, `MYSQLDATABASE`.
 
-## Deployment on Railway.app
+## Stack
 
-1. Go to [Railway.app](https://railway.app)
-2. Connect your GitHub account
-3. Select this repository
-4. Railway will auto-detect PHP and deploy
-5. Set environment variables if needed (database, etc.)
-
-## Database Setup
-
-For full functionality, set up MySQL database:
-- Import `EMS2/setup_users.sql`
-- Configure Railway environment variables: `MYSQLHOST`, `MYSQLUSER`, `MYSQLPASSWORD`, `MYSQLDATABASE`, `MYSQLPORT`
-- Use the centralized connection helpers in `EMS2/db.php` or `config_db.php` instead of hardcoding credentials in PHP files
-
-## File Structure
-
-- `index.php` - Main landing page
-- `EMS2/` - Student enrollment system
-- `components/` - Shared UI components
-- `main_*.php` - Section pages
-- `page_settings.json` - Editable content storage
-
-## Technologies
-
-- PHP 7+
-- MySQL
-- HTML5/CSS3
-- JavaScript
-- Tailwind CSS (via CDN)
+- PHP 8.x, MySQL, Tailwind CSS (CDN), JavaScript
