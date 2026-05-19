@@ -125,5 +125,8 @@ if ($col_info && ($ci = $col_info->fetch_assoc())) {
     }
 }
 
-echo "Migration complete.\n";
-$conn->close();
+// Only output when run directly (not included from login.php)
+if (basename($_SERVER['SCRIPT_FILENAME'] ?? '') === 'migrate_accounts.php') {
+    echo "Migration complete.\n";
+    $conn->close();
+}
