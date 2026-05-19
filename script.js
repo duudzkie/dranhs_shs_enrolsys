@@ -272,7 +272,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 selectedG11Track = card.getAttribute('data-track');
                 selectedG11Pathway = card.getAttribute('data-pathway');
                 const data = (pathwayData[selectedG11Track] && pathwayData[selectedG11Track][selectedG11Pathway]) ? pathwayData[selectedG11Track][selectedG11Pathway] : { description: '', electives: [] };
-                const detailDesc = document.getElementById('detail-desc');
                 const careersList = document.getElementById('detail-careers');
                 const subjectsList = document.getElementById('detail-subjects');
                 const subjectsTitle = document.getElementById('detail-subjects-title');
@@ -292,7 +291,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 if (detailPathwayName) detailPathwayName.textContent = selectedG11Pathway;
-                if (detailDesc) detailDesc.textContent = data.description || 'No description available for this pathway yet.';
 
                 if (detailSchedule) {
                     if (data.schedule) {

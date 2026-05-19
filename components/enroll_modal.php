@@ -312,8 +312,7 @@ foreach ($pathways_by_track as $track => $items) {
                 <div class="text-center mb-6 lg:mb-10 shrink-0">
                     <span id="detail-track-name" class="inline-block px-3 py-1 rounded-full text-[0.65rem] font-bold uppercase tracking-widest mb-3">Track Name</span>
                     <span id="detail-schedule" class="px-3 py-1 rounded-full text-[0.65rem] font-black uppercase tracking-widest mb-3 ml-2 border-2 border-rose-400 bg-rose-50 text-rose-600 shadow-sm animate-pulse flex items-center gap-1.5 justify-center max-w-fit mx-auto sm:inline-flex" style="display: none;"></span>
-                    <h2 id="detail-pathway-name" class="text-3xl lg:text-4xl font-heading font-black text-dranhs-dark tracking-tight leading-tight px-4">Pathway Name Here</h2>
-                    <p id="detail-desc" class="text-slate-600 leading-relaxed font-medium mt-4 max-w-2xl mx-auto px-4">Pathway description goes here.</p>
+                    <h2 id="detail-pathway-name" class="text-3xl lg:text-4xl font-heading font-black text-dranhs-dark tracking-tight leading-tight px-4 mb-2">Pathway Name Here</h2>
                 </div>
 
                 <div class="flex-1 flex flex-col gap-6">
