@@ -543,11 +543,16 @@ if (!$conn->connect_error) {
             
             const trackSelect = document.getElementById('g11-track');
             const pathwaySelect = document.getElementById('g11-pathway');
+            const trackHidden = document.getElementById('g11-track-hidden');
+            const pathwayHidden = document.getElementById('g11-pathway-hidden');
             const studentTypeSelect = document.getElementById('student-type');
 
             if(track) {
                 trackSelect.value = track;
                 trackSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                if (trackHidden) {
+                    trackHidden.value = trackSelect.value;
+                }
                 if (studentTypeSelect) {
                     if (track === 'ALS') {
                         studentTypeSelect.innerHTML = '<option value="ALS" selected>ALS (Alternative Learning System)</option>';
@@ -563,6 +568,9 @@ if (!$conn->connect_error) {
             if(pathway && pathwaySelect.querySelector(`option[value="${pathway}"]`)) {
                 pathwaySelect.value = pathway;
                 pathwaySelect.dispatchEvent(new Event('change', { bubbles: true }));
+                if (pathwayHidden) {
+                    pathwayHidden.value = pathwaySelect.value;
+                }
             }
 
             // Handle student type change for previous school info
