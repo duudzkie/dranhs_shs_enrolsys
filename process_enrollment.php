@@ -126,8 +126,96 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         die("Error: LRN must be 12 digits.");
     }
 
-    // No student photo upload required
-    $avatarPath = null;
+    // Optional ID photo upload — upload to S3 if provided
+    $photo_path = null;
+    if (isset($_FILES['id_photo']) && $_FILES['id_photo']['error'] === UPLOAD_ERR_OK) {
+        $finfo    = new finfo(FILEINFO_MIME_TYPE);
+        $mime     = $finfo->file($_FILES['id_photo']['tmp_name']);
+        $allowed_mime = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif'];
+
+        if (array_key_exists($mime, $allowed_mime) && $_FILES['id_photo']['size'] <= 5 * 1024 * 1024) {
+            $img_info = @getimagesize($_FILES['id_photo']['tmp_name']);
+            if ($img_info && $img_info[0] >= 100 && $img_info[1] >= 100) {
+                $s3_bucket     = (string)getenv('BUCKET');
+                $s3_region     = (string)getenv('REGION');
+                $s3_endpoint   = (string)getenv('ENDPOINT');
+                $s3_access_key = (string)getenv('ACCESS_KEY_ID');
+                $s3_secret_key = (string)getenv('SECRET_ACCESS_KEY');
+
+                if ($s3_bucket !== '' && $s3_region !== '' && $s3_endpoint !== '' &&
+                    $s3_access_key !== '' && $s3_secret_key !== '') {
+                    $ext        = $allowed_mime[$mime];
+                    $object_key = 'id_photos/' . preg_replace('/[^0-9]/', '', $_POST['lrn']) . '_' . time() . '.' . $ext;
+                    $file_body  = file_get_contents($_FILES['id_photo']['tmp_name']);
+
+                    if ($file_body !== false) {
+                        try {
+                            $host       = parse_url($s3_endpoint, PHP_URL_HOST) ?: $s3_endpoint;
+                            $now        = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+                            $date_stamp = $now->format('Ymd');
+                            $amz_date   = $now->format('Ymd\THis\Z');
+                            $payload_hash = hash('sha256', $file_body);
+
+                            $canonical_headers =
+                                'content-type:' . $mime . "\n" .
+                                'host:' . $host . "\n" .
+                                'x-amz-content-sha256:' . $payload_hash . "\n" .
+                                'x-amz-date:' . $amz_date . "\n";
+                            $signed_headers   = 'content-type;host;x-amz-content-sha256;x-amz-date';
+                            $canonical_uri    = '/' . $s3_bucket . '/' . ltrim($object_key, '/');
+                            $canonical_request = implode("\n", [
+                                'PUT', $canonical_uri, '', $canonical_headers, $signed_headers, $payload_hash,
+                            ]);
+
+                            $credential_scope = $date_stamp . '/' . $s3_region . '/s3/aws4_request';
+                            $string_to_sign   = implode("\n", [
+                                'AWS4-HMAC-SHA256', $amz_date, $credential_scope,
+                                hash('sha256', $canonical_request),
+                            ]);
+
+                            $signing_key = hash_hmac('sha256', 'aws4_request',
+                                hash_hmac('sha256', 's3',
+                                    hash_hmac('sha256', $s3_region,
+                                        hash_hmac('sha256', $date_stamp, 'AWS4' . $s3_secret_key, true),
+                                    true),
+                                true),
+                            true);
+                            $signature = hash_hmac('sha256', $string_to_sign, $signing_key);
+
+                            $authorization =
+                                'AWS4-HMAC-SHA256 Credential=' . $s3_access_key . '/' . $credential_scope .
+                                ', SignedHeaders=' . $signed_headers .
+                                ', Signature=' . $signature;
+
+                            $put_url = rtrim($s3_endpoint, '/') . '/' . $s3_bucket . '/' . ltrim($object_key, '/');
+                            $ctx = stream_context_create([
+                                'http' => [
+                                    'method'        => 'PUT',
+                                    'header'        =>
+                                        "Content-Type: {$mime}\r\n" .
+                                        "x-amz-date: {$amz_date}\r\n" .
+                                        "x-amz-content-sha256: {$payload_hash}\r\n" .
+                                        "Authorization: {$authorization}\r\n" .
+                                        "Content-Length: " . strlen($file_body) . "\r\n",
+                                    'content'       => $file_body,
+                                    'ignore_errors' => true,
+                                    'timeout'       => 30,
+                                ],
+                            ]);
+                            $result = @file_get_contents($put_url, false, $ctx);
+                            $status_line = $http_response_header[0] ?? '';
+                            preg_match('/HTTP\/\S+\s+(\d+)/', $status_line, $m);
+                            if ((int)($m[1] ?? 0) >= 200 && (int)($m[1] ?? 0) < 300) {
+                                $photo_path = $put_url;
+                            }
+                        } catch (Exception $e) {
+                            error_log('process_enrollment.php S3 photo upload error: ' . $e->getMessage());
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // Check if LRN already exists
     $lrn_check = $conn->prepare("SELECT id FROM students WHERE lrn = ?");
@@ -219,8 +307,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         semester, track, pathway_strand, school_year, grade_level, lrn, student_type, enrollment_status,
         height, weight, psa_birth_cert,
         street, province, city, barangay, zip_code, living_with,
-        prev_school, prev_school_year, prev_section
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        prev_school, prev_school_year, prev_section, photo_path
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
     if (!$stmt) {
         die("Prepare failed: " . $conn->error);
@@ -239,7 +327,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_POST['lrn'], $student_type, $enrollment_status, post_value('height', null), post_value('weight', null), post_value('psa_birth_cert', ''),
         post_value('street', ''), post_value('province', ''), post_value('city', ''), post_value('barangay', ''),
         post_value('zip_code', ''), post_value('living_with', ''),
-        post_value('prev_school', null), post_value('prev_school_year', null), post_value('prev_section', null)
+        post_value('prev_school', null), post_value('prev_school_year', null), post_value('prev_section', null),
+        $photo_path
     ];
 
     $types = str_repeat('s', count($params));

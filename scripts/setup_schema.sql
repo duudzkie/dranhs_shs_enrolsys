@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS students (
     weight DECIMAL(5,2),
     psa_birth_cert VARCHAR(50),
     avatar_path VARCHAR(255),
+    photo_path VARCHAR(500) NULL,
     street VARCHAR(255),
     province VARCHAR(100),
     city VARCHAR(100),

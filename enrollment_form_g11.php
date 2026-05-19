@@ -486,6 +486,66 @@ if (!$conn->connect_error) {
                 </div>
             </div>
 
+            <!-- ID Photo Upload -->
+            <div class="form-section">
+                <div class="absolute top-0 left-0 w-2 h-full bg-violet-600"></div>
+                <div class="section-header">
+                    <h2 class="section-title">ID Photo <span class="text-slate-400 font-normal text-base normal-case tracking-normal">(Optional)</span></h2>
+                </div>
+                <p class="text-xs text-slate-500 mb-5 font-medium">Upload a clear, front-facing photo for your student ID card. Accepted formats: JPG, PNG, GIF · Max 5 MB · Min 100×100 px. You may also upload this later via the <a href="upload_form.html" class="text-violet-600 font-bold hover:underline" target="_blank">photo upload page</a>.</p>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+                    <!-- Drop zone -->
+                    <div>
+                        <div
+                            id="g11-drop-zone"
+                            class="relative border-2 border-dashed border-slate-300 rounded-xl p-5 text-center cursor-pointer transition-colors hover:border-violet-400 hover:bg-violet-50/40"
+                            role="button"
+                            tabindex="0"
+                            aria-label="Click or drag to upload photo"
+                        >
+                            <div id="g11-drop-placeholder">
+                                <svg class="mx-auto mb-2 text-slate-400" width="36" height="36" viewBox="0 0 24 24"
+                                     fill="none" stroke="currentColor" stroke-width="1.5"
+                                     stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                                    <polyline points="21 15 16 10 5 21"/>
+                                </svg>
+                                <p class="text-sm font-semibold text-slate-500">Drag &amp; drop or <span class="text-violet-600 font-bold underline underline-offset-2">browse</span></p>
+                                <p class="text-xs text-slate-400 mt-1">JPG, PNG, GIF · max 5 MB</p>
+                            </div>
+                            <div id="g11-preview-container" class="hidden">
+                                <img id="g11-preview-img" src="" alt="Photo preview"
+                                     class="mx-auto max-h-40 max-w-full rounded-lg shadow object-contain mb-2">
+                                <p id="g11-preview-filename" class="text-xs font-semibold text-slate-600 truncate"></p>
+                                <p id="g11-preview-dims" class="text-xs text-slate-400 mt-0.5"></p>
+                                <button type="button" id="g11-remove-photo"
+                                        class="mt-2 text-xs font-bold text-red-500 hover:text-red-700 underline underline-offset-2">
+                                    Remove photo
+                                </button>
+                            </div>
+                            <input type="file" id="g11-photo-input" name="id_photo"
+                                   accept="image/jpeg,image/png,image/gif"
+                                   class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                        </div>
+                        <p id="g11-photo-error" class="text-red-500 text-xs font-semibold mt-1 hidden"></p>
+                    </div>
+
+                    <!-- Tips -->
+                    <div class="bg-violet-50 border border-violet-100 rounded-xl p-4 text-xs text-violet-800 leading-relaxed self-start">
+                        <p class="font-black uppercase tracking-wider mb-2">Photo Tips</p>
+                        <ul class="list-disc list-inside space-y-1 font-medium">
+                            <li>Face the camera directly</li>
+                            <li>Use a plain, light-colored background</li>
+                            <li>Ensure good lighting — no shadows on face</li>
+                            <li>No sunglasses or hats</li>
+                            <li>Recent photo preferred</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
             <!-- Agreements & Signatures -->
             <div class="form-section pb-10">
                 <div class="section-header">
@@ -667,6 +727,88 @@ if (!$conn->connect_error) {
             // Form specific Logic
             initFormLogic('violet');
         });
+    </script>
+    <script>
+    // ── Inline photo-upload widget for G11 enrollment form ───────────────────
+    (() => {
+        'use strict';
+
+        const dropZone    = document.getElementById('g11-drop-zone');
+        const photoInput  = document.getElementById('g11-photo-input');
+        const placeholder = document.getElementById('g11-drop-placeholder');
+        const preview     = document.getElementById('g11-preview-container');
+        const previewImg  = document.getElementById('g11-preview-img');
+        const previewName = document.getElementById('g11-preview-filename');
+        const previewDims = document.getElementById('g11-preview-dims');
+        const removeBtn   = document.getElementById('g11-remove-photo');
+        const photoError  = document.getElementById('g11-photo-error');
+
+        const MAX_BYTES   = 5 * 1024 * 1024;
+        const ALLOWED     = ['image/jpeg', 'image/png', 'image/gif'];
+
+        if (!dropZone) return; // guard
+
+        dropZone.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); photoInput.click(); }
+        });
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault(); dropZone.classList.add('border-violet-500', 'bg-violet-50');
+        });
+        ['dragleave', 'dragend'].forEach(ev =>
+            dropZone.addEventListener(ev, () => dropZone.classList.remove('border-violet-500', 'bg-violet-50'))
+        );
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-violet-500', 'bg-violet-50');
+            const f = e.dataTransfer?.files?.[0];
+            if (f) handleFile(f);
+        });
+        photoInput.addEventListener('change', () => {
+            const f = photoInput.files?.[0];
+            if (f) handleFile(f);
+        });
+        removeBtn.addEventListener('click', (e) => { e.stopPropagation(); resetPhoto(); });
+
+        function handleFile(file) {
+            photoError.classList.add('hidden');
+            if (!ALLOWED.includes(file.type)) {
+                photoError.textContent = 'Invalid type. Use JPG, PNG, or GIF.';
+                photoError.classList.remove('hidden');
+                resetPhoto(); return;
+            }
+            if (file.size > MAX_BYTES) {
+                photoError.textContent = 'File exceeds 5 MB limit.';
+                photoError.classList.remove('hidden');
+                resetPhoto(); return;
+            }
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const img = new Image();
+                img.onload = () => {
+                    if (img.naturalWidth < 100 || img.naturalHeight < 100) {
+                        photoError.textContent = `Image too small (${img.naturalWidth}×${img.naturalHeight} px). Min 100×100 px.`;
+                        photoError.classList.remove('hidden');
+                        resetPhoto(); return;
+                    }
+                    previewImg.src = ev.target.result;
+                    previewName.textContent = file.name;
+                    const kb = (file.size / 1024).toFixed(1);
+                    previewDims.textContent = `${img.naturalWidth}×${img.naturalHeight} px · ${kb} KB`;
+                    placeholder.classList.add('hidden');
+                    preview.classList.remove('hidden');
+                };
+                img.src = ev.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function resetPhoto() {
+            photoInput.value = '';
+            previewImg.src = '';
+            preview.classList.add('hidden');
+            placeholder.classList.remove('hidden');
+        }
+    })();
     </script>
 </body>
 </html>
