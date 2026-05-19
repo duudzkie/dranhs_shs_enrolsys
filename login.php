@@ -38,10 +38,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $login_input = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
 
+    // Auto-migrate DB if new columns don't exist yet
+    $db = $conn->real_escape_string(DB_NAME);
+    $_col = $conn->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='{$db}' AND TABLE_NAME='users' AND COLUMN_NAME='email'");
+    if ($_col && $_col->num_rows === 0) {
+        // Run migration
+        if (file_exists(__DIR__ . '/migrate_accounts.php')) {
+            include __DIR__ . '/migrate_accounts.php';
+            $conn = db_connect(); // reconnect after migration
+        }
+    }
+
     // Support login by username OR email
-    $sql = "SELECT * FROM users WHERE username = ? OR email = ? LIMIT 1";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("ss", $login_input, $login_input);
+    $has_email_col = true;
+    $_col2 = $conn->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='{$db}' AND TABLE_NAME='users' AND COLUMN_NAME='email'");
+    $has_email_col = $_col2 && $_col2->num_rows > 0;
+
+    if ($has_email_col) {
+        $sql = "SELECT * FROM users WHERE username = ? OR email = ? LIMIT 1";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("ss", $login_input, $login_input);
+    } else {
+        $sql = "SELECT * FROM users WHERE username = ? LIMIT 1";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("s", $login_input);
+    }
     $stmt->execute();
     $result = $stmt->get_result();
 

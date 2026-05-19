@@ -28,26 +28,47 @@ if (isset($_GET['keepalive'])) {
 $_sv_conn = db_connect();
 $_admin_school_logo = null;
 if (!$_sv_conn->connect_error) {
-    $_sv_stmt = $_sv_conn->prepare("SELECT u.id, u.roles, u.is_admin, u.full_name, u.status, c.section_name AS adviser_section, c.id AS adviser_classroom_id FROM users u LEFT JOIN classrooms c ON c.adviser_id = u.id WHERE u.id = ? LIMIT 1");
-    if ($_sv_stmt) {
-        $_sv_stmt->bind_param("i", $_SESSION['user_id']);
-        $_sv_stmt->execute();
-        $_sv_result = $_sv_stmt->get_result()->fetch_assoc();
-        $_sv_stmt->close();
-        if (!$_sv_result || ($_sv_result['status'] ?? 'active') === 'disabled') {
+    // Try new schema first, fall back to old
+    $_sv_result = null;
+    try {
+        $_sv_stmt = $_sv_conn->prepare("SELECT u.id, u.roles, u.is_admin, u.full_name, u.status, c.section_name AS adviser_section, c.id AS adviser_classroom_id FROM users u LEFT JOIN classrooms c ON c.adviser_id = u.id WHERE u.id = ? LIMIT 1");
+        if ($_sv_stmt) {
+            $_sv_stmt->bind_param("i", $_SESSION['user_id']);
+            $_sv_stmt->execute();
+            $_sv_result = $_sv_stmt->get_result()->fetch_assoc();
+            $_sv_stmt->close();
+        }
+    } catch (Exception $e) {
+        // Old schema — fall back
+        $_sv_stmt = $_sv_conn->prepare("SELECT id, role FROM users WHERE id = ? LIMIT 1");
+        if ($_sv_stmt) {
+            $_sv_stmt->bind_param("i", $_SESSION['user_id']);
+            $_sv_stmt->execute();
+            $_sv_result = $_sv_stmt->get_result()->fetch_assoc();
+            $_sv_stmt->close();
+            if ($_sv_result) {
+                $_sv_result['roles'] = $_sv_result['role'] === 'admin' ? '' : ($_sv_result['role'] ?? '');
+                $_sv_result['is_admin'] = $_sv_result['role'] === 'admin' ? 1 : 0;
+                $_sv_result['status'] = 'active';
+            }
+        }
+    }
+    if ($_sv_result) {
+        if (($_sv_result['status'] ?? 'active') === 'disabled') {
             session_destroy();
             ems2_login_redirect();
         }
-        // Sync session with DB on every request
         $_SESSION['roles']     = $_sv_result['roles'] ?? '';
         $_SESSION['is_admin']  = (int)($_sv_result['is_admin'] ?? 0);
         $_SESSION['full_name'] = $_sv_result['full_name'] ?? $_SESSION['username'];
         $_SESSION['adviser_section']      = $_sv_result['adviser_section'] ?? null;
         $_SESSION['adviser_classroom_id'] = $_sv_result['adviser_classroom_id'] ?? null;
-        // Backward compat
         $is_admin_flag = (int)($_sv_result['is_admin'] ?? 0);
         $roles_str = trim($_sv_result['roles'] ?? '');
         $_SESSION['role'] = $is_admin_flag ? 'admin' : ($roles_str ?: 'faculty');
+    } else {
+        session_destroy();
+        ems2_login_redirect();
     }
     // Load school logo for sidebar
     $_logo_res = $_sv_conn->query("SELECT setting_value FROM system_settings WHERE setting_key='school_logo' LIMIT 1");
