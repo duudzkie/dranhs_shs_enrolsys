@@ -369,7 +369,7 @@ function openEncModal(student) {
     const watchIssueDetails = String(student.watch_issue_details || '').trim();
     if (watchIssueType) {
         flagType.textContent = watchIssueType;
-        flagDetails.textContent = watchIssueDetails || 'No additional notes provided in the watchlist.';
+        flagDetails.textContent = watchIssueDetails || 'No additional notes provided in the focus list.';
         flagAlert.classList.remove('hidden');
     } else {
         flagType.textContent = '';

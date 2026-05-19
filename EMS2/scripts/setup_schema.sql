@@ -162,6 +162,23 @@ CREATE TABLE IF NOT EXISTS g11_completers (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Pathway / Strand Catalog for curriculum management
+CREATE TABLE IF NOT EXISTS pathway_strand (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    grade_level VARCHAR(20) NOT NULL,
+    category VARCHAR(20) NOT NULL,
+    track VARCHAR(50) NOT NULL,
+    pathway_strand VARCHAR(150) NOT NULL,
+    code VARCHAR(100) NOT NULL,
+    description TEXT DEFAULT NULL,
+    electives TEXT DEFAULT NULL,
+    enabled TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_pathway_code (code),
+    UNIQUE KEY unique_grade_code (grade_level, code)
+);
+
 -- Watchlist (flagged students)
 CREATE TABLE IF NOT EXISTS watchlist (
     id INT AUTO_INCREMENT PRIMARY KEY,

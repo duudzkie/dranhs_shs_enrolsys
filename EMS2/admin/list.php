@@ -398,12 +398,32 @@ if (!$list_conn->connect_error) {
     if ($r) { while ($row=$r->fetch_assoc()) $g11_sections[] = $row['name']; $r->close(); }
 
     // Fetch all
-    $r = $list_conn->query("SELECT * FROM stem_qualifiers ORDER BY pathway_cluster, last_name, first_name");
-    if ($r) { while ($row=$r->fetch_assoc()) $stem_rows[]=$row; $r->close(); }
-    $r = $list_conn->query("SELECT * FROM g11_completers ORDER BY last_name, first_name");
-    if ($r) { while ($row=$r->fetch_assoc()) $g11_rows[]=$row; $r->close(); }
-    $r = $list_conn->query("SELECT * FROM watchlist ORDER BY last_name, first_name");
-    if ($r) { while ($row=$r->fetch_assoc()) $watch_rows[]=$row; $r->close(); }
+    $stem_stmt = $list_conn->prepare("SELECT * FROM stem_qualifiers WHERE school_year = ? ORDER BY pathway_cluster, last_name, first_name");
+    if ($stem_stmt) {
+        $stem_stmt->bind_param("s", $school_year);
+        $stem_stmt->execute();
+        $r = $stem_stmt->get_result();
+        if ($r) { while ($row = $r->fetch_assoc()) $stem_rows[] = $row; $r->close(); }
+        $stem_stmt->close();
+    }
+
+    $g11_stmt = $list_conn->prepare("SELECT * FROM g11_completers WHERE school_year = ? ORDER BY last_name, first_name");
+    if ($g11_stmt) {
+        $g11_stmt->bind_param("s", $school_year);
+        $g11_stmt->execute();
+        $r = $g11_stmt->get_result();
+        if ($r) { while ($row = $r->fetch_assoc()) $g11_rows[] = $row; $r->close(); }
+        $g11_stmt->close();
+    }
+
+    $watch_stmt = $list_conn->prepare("SELECT * FROM watchlist WHERE school_year = ? ORDER BY last_name, first_name");
+    if ($watch_stmt) {
+        $watch_stmt->bind_param("s", $school_year);
+        $watch_stmt->execute();
+        $r = $watch_stmt->get_result();
+        if ($r) { while ($row = $r->fetch_assoc()) $watch_rows[] = $row; $r->close(); }
+        $watch_stmt->close();
+    }
     $list_conn->close();
 }
 
@@ -418,6 +438,11 @@ foreach ($g11_rows as $row) {
     $section_name = trim((string)($row['section'] ?? ''));
     if ($section_name !== '' && !in_array($section_name, $g11_card_sections, true)) {
         $g11_card_sections[] = $section_name;
+    }
+}
+foreach ($g11_rows as $row) {
+    if (trim((string)($row['section'] ?? '')) === '' && !in_array('Unassigned', $g11_card_sections, true)) {
+        $g11_card_sections[] = 'Unassigned';
     }
 }
 
@@ -718,9 +743,9 @@ foreach ($g11_rows as $row) {
                 <div class="xl:col-span-2">
                     <div class="rounded-2xl border border-slate-200 overflow-hidden">
                         <div class="px-5 py-4 border-b border-slate-100 bg-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                            <h3 class="text-lg font-heading font-black text-dranhs-dark">Watchlist</h3>
+                            <h3 class="text-lg font-heading font-black text-dranhs-dark">Focus List</h3>
                             <div class="relative w-full sm:w-64">
-                                <input type="text" id="watch-search" placeholder="Search watchlist..." class="w-full bg-slate-50 border border-slate-200 px-3 py-1.5 pl-9 rounded-lg text-sm focus:border-dranhs-green outline-none transition-colors">
+                                <input type="text" id="watch-search" placeholder="Search focus list..." class="w-full bg-slate-50 border border-slate-200 px-3 py-1.5 pl-9 rounded-lg text-sm focus:border-dranhs-green outline-none transition-colors">
                                 <svg class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                             </div>
                         </div>
@@ -802,7 +827,13 @@ function hideG11CompleterModal() {
 }
 
 function renderG11CompleterTable(sectionName) {
-    const rows = LIST_G11_ROWS.filter(row => String(row.section || '') === String(sectionName || ''));
+    const rows = LIST_G11_ROWS.filter(row => {
+        const rowSection = String(row.section || '').trim();
+        if (String(sectionName || '') === 'Unassigned') {
+            return rowSection === '';
+        }
+        return rowSection === String(sectionName || '');
+    });
     g11CompleterModalTitle.textContent = `${sectionName} Completer Table`;
 
     if (rows.length === 0) {
@@ -857,4 +888,34 @@ document.querySelectorAll('.g11-section-card').forEach(card => {
 
 if (closeG11CompleterModal) closeG11CompleterModal.addEventListener('click', hideG11CompleterModal);
 if (g11CompleterBackdrop) g11CompleterBackdrop.addEventListener('click', hideG11CompleterModal);
+
+const stemSearch = document.getElementById('stem-search');
+if (stemSearch) {
+    stemSearch.addEventListener('input', function () {
+        const query = this.value.toLowerCase().trim();
+        document.querySelectorAll('#list-tab-stem tbody tr.stem-row').forEach(row => {
+            row.style.display = row.textContent.toLowerCase().includes(query) ? '' : 'none';
+        });
+    });
+}
+
+const watchSearch = document.getElementById('watch-search');
+if (watchSearch) {
+    watchSearch.addEventListener('input', function () {
+        const query = this.value.toLowerCase().trim();
+        document.querySelectorAll('#list-tab-watch tbody tr.stem-row').forEach(row => {
+            row.style.display = row.textContent.toLowerCase().includes(query) ? '' : 'none';
+        });
+    });
+}
+
+const g11Search = document.getElementById('g11-search');
+if (g11Search) {
+    g11Search.addEventListener('input', function () {
+        const query = this.value.toLowerCase().trim();
+        document.querySelectorAll('#g11-completer-modal-body tbody tr').forEach(row => {
+            row.style.display = row.textContent.toLowerCase().includes(query) ? '' : 'none';
+        });
+    });
+}
 </script>

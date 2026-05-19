@@ -20,6 +20,11 @@ if (isset($_SESSION['_last_activity'])) {
 }
 $_SESSION['_last_activity'] = time();
 
+if (isset($_GET['keepalive'])) {
+    http_response_code(204);
+    exit;
+}
+
 // Validate session against DB (prevents stale sessions)
 $_sv_conn = db_connect();
 $_admin_school_logo = null;
@@ -378,6 +383,29 @@ $inactiveClasses = 'text-slate-300 hover:bg-slate-800 hover:text-white';
 
     // Start the timer
     resetSessionTimer();
+
+    let _keepAliveTimer;
+    function pingKeepAlive() {
+        fetch('admin.php?keepalive=1', {
+            method: 'GET',
+            credentials: 'same-origin',
+            cache: 'no-store'
+        }).catch(() => {});
+    }
+
+    function scheduleKeepAlive() {
+        clearTimeout(_keepAliveTimer);
+        _keepAliveTimer = setTimeout(() => {
+            pingKeepAlive();
+            scheduleKeepAlive();
+        }, 120000);
+    }
+
+    ['mousemove','keydown','click','scroll','touchstart'].forEach(evt => {
+        document.addEventListener(evt, scheduleKeepAlive, { passive: true });
+    });
+
+    scheduleKeepAlive();
     </script>
 </body>
 </html>

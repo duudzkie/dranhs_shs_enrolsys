@@ -1,6 +1,6 @@
 <?php
 if (basename($_SERVER['PHP_SELF']) == basename(__FILE__)) {
-    header('Location: admin.php');
+    header('Location: admin.php?page=system_settings');
     exit;
 }
 
@@ -26,9 +26,39 @@ if (!empty($_SESSION['_ss_toast'])) {
 // Helper: set flash and redirect (PRG pattern — prevents duplicate on refresh)
 function ss_redirect($msg, $type = 'success', $tab = '') {
     $_SESSION['_ss_toast'] = ['msg' => $msg, 'type' => $type];
-    $url = '?page=system_settings' . ($tab ? '#tab-' . $tab : '');
+    $url = 'admin.php?page=system_settings' . ($tab ? '#tab-' . $tab : '');
     header('Location: ' . $url);
     exit;
+}
+
+function ss_tab_from_action($action) {
+    switch ((string)$action) {
+        case 'save_main_settings':
+            return 'main-settings';
+        case 'save_curriculum':
+        case 'delete_curriculum':
+            return 'curriculum';
+        case 'add_registry':
+        case 'delete_registry':
+            return 'registries';
+        case 'assign_room':
+        case 'add_annex':
+        case 'delete_annex':
+        case 'add_facility':
+        case 'assign_facility_room':
+        case 'delete_facility':
+            return 'room-assignment';
+        case 'upload_theme_asset':
+        case 'remove_theme_asset':
+            return 'theme';
+        case 'retrieve_student':
+        case 'delete_student':
+            return 'withdrawn';
+        case 'upload_template':
+            return 'print-templates';
+        default:
+            return 'main-settings';
+    }
 }
 
 // Ensure user_id column exists in advisers_accounts (MySQL 5.7 safe)
@@ -55,6 +85,21 @@ $conn->query("CREATE TABLE IF NOT EXISTS room_facilities (
     floor_number VARCHAR(20) NOT NULL,
     room_number VARCHAR(50) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)");
+$conn->query("CREATE TABLE IF NOT EXISTS pathway_strand (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    grade_level VARCHAR(20) NOT NULL,
+    category VARCHAR(20) NOT NULL,
+    track VARCHAR(50) NOT NULL,
+    pathway_strand VARCHAR(150) NOT NULL,
+    code VARCHAR(100) NOT NULL,
+    description TEXT DEFAULT NULL,
+    electives TEXT DEFAULT NULL,
+    enabled TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_pathway_code (code),
+    UNIQUE KEY unique_grade_code (grade_level, code)
 )");
 
 // Handle POST Requests
@@ -110,38 +155,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ss_redirect('Room successfully assigned!', 'success', 'room-assignment');
         }
         elseif ($_POST['action'] === 'save_curriculum') {
-            $vis = isset($_POST['cv']) ? $_POST['cv'] : [];
-            
-            // Process cv payload from complex array structure
-            foreach ($vis as $track => &$pathways) {
-                foreach ($pathways as $id => &$p) {
-                    $p['enabled'] = isset($p['enabled']) ? true : false;
+            $id           = intval($_POST['id'] ?? 0);
+            $grade_level  = trim($_POST['grade_level'] ?? '');
+            $category     = trim($_POST['category'] ?? '');
+            $track        = trim($_POST['track'] ?? '');
+            $pathway_name = trim($_POST['pathway_strand'] ?? '');
+            $code         = trim($_POST['code'] ?? '');
+            $description  = trim($_POST['description'] ?? '');
+            $electives    = array_values(array_filter(array_map('trim', $_POST['electives'] ?? []), fn($value) => $value !== ''));
+            $enabled      = isset($_POST['enabled']) ? 1 : 0;
+
+            if ($grade_level === '' || $pathway_name === '' || $code === '' || $track === '' || $category === '') {
+                $toast_message = 'Please fill in Grade Level, Category, Track, Pathway or Strand name, and Code.';
+                $toast_type = 'error';
+            } else {
+                $electives_json = !empty($electives) ? json_encode(array_values($electives)) : null;
+                try {
+                    if ($id > 0) {
+                        $update = $conn->prepare("UPDATE pathway_strand SET grade_level = ?, category = ?, track = ?, pathway_strand = ?, code = ?, description = ?, electives = ?, enabled = ? WHERE id = ?");
+                        if (!$update) {
+                            throw new RuntimeException('Unable to prepare curriculum update.');
+                        }
+                        $update->bind_param("sssssssii", $grade_level, $category, $track, $pathway_name, $code, $description, $electives_json, $enabled, $id);
+                        $update->execute();
+                        $update->close();
+                        $toast_message = 'Curriculum entry updated successfully.';
+                    } else {
+                        $insert = $conn->prepare("INSERT INTO pathway_strand (grade_level, category, track, pathway_strand, code, description, electives, enabled) VALUES (?,?,?,?,?,?,?,?)");
+                        if (!$insert) {
+                            throw new RuntimeException('Unable to prepare curriculum insert.');
+                        }
+                        $insert->bind_param("sssssssi", $grade_level, $category, $track, $pathway_name, $code, $description, $electives_json, $enabled);
+                        $insert->execute();
+                        $insert->close();
+                        $toast_message = 'Curriculum entry added successfully.';
+                    }
+                    $toast_type = 'success';
+                } catch (mysqli_sql_exception $e) {
+                    if ((int)$e->getCode() === 1062) {
+                        $toast_message = 'That curriculum code is already in use. Please choose a unique code.';
+                    } else {
+                        $toast_message = 'Curriculum entry could not be saved: ' . $e->getMessage();
+                    }
+                    $toast_type = 'error';
+                } catch (RuntimeException $e) {
+                    $toast_message = $e->getMessage();
+                    $toast_type = 'error';
                 }
             }
-            // Re-index arrays to ensure JSON encodes them as arrays instead of objects
-            $final_structure = [
-                'Academic' => array_values($vis['Academic'] ?? []),
-                'Tech-Pro' => array_values($vis['Tech-Pro'] ?? []),
-                'ALS'      => array_values($vis['ALS'] ?? [])
-            ];
-            
-            $vis_json = json_encode($final_structure);
-            
-            $stmt = $conn->prepare("UPDATE system_settings SET setting_value = ? WHERE setting_key = 'curriculum_structure'");
-            $stmt->bind_param("s", $vis_json);
-            $stmt->execute();
-            if ($stmt->affected_rows === 0) {
-                $check = $conn->query("SELECT setting_key FROM system_settings WHERE setting_key = 'curriculum_structure'");
-                if ($check->num_rows === 0) {
-                    $insert = $conn->prepare("INSERT INTO system_settings (setting_key, setting_value) VALUES ('curriculum_structure', ?)");
-                    $insert->bind_param("s", $vis_json);
-                    $insert->execute();
-                    $insert->close();
+            ss_redirect($toast_message, $toast_type, 'curriculum');
+        }
+        elseif ($_POST['action'] === 'delete_curriculum') {
+            $id = intval($_POST['id'] ?? 0);
+            if ($id > 0) {
+                $stmt = $conn->prepare("DELETE FROM pathway_strand WHERE id = ?");
+                if ($stmt) {
+                    $stmt->bind_param("i", $id);
+                    $stmt->execute();
+                    $stmt->close();
                 }
+                ss_redirect('Curriculum entry deleted.', 'success', 'curriculum');
+            } else {
+                ss_redirect('Invalid curriculum entry.', 'error', 'curriculum');
             }
-            $stmt->close();
-            
-            ss_redirect('Curriculum Matrix updated!', 'success', 'curriculum');
         }
         elseif ($_POST['action'] === 'add_registry') {
             $cat = $_POST['category'];
@@ -413,6 +489,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     }
+
+    ss_redirect(
+        $toast_message !== '' ? $toast_message : 'System settings saved successfully.',
+        $toast_type !== '' ? $toast_type : 'success',
+        ss_tab_from_action($_POST['action'] ?? '')
+    );
 }
 
 // Fetch Settings
@@ -440,6 +522,10 @@ if ($fr) { while ($r = $fr->fetch_assoc()) $facilities[] = $r; $fr->close(); }
 $withdrawn_students = [];
 $wr = $conn->query("SELECT id, lrn, last_name, first_name, middle_name, extension_name, grade_level, track, pathway_strand, created_at FROM students WHERE enrollment_status = 'withdrawn' ORDER BY last_name, first_name");
 if ($wr) { while ($r = $wr->fetch_assoc()) $withdrawn_students[] = $r; $wr->close(); }
+
+$pathway_catalog = [];
+$pc = $conn->query("SELECT * FROM pathway_strand ORDER BY FIELD(grade_level,'Grade 11','Grade 12'), category, track, pathway_strand");
+if ($pc) { while ($row = $pc->fetch_assoc()) $pathway_catalog[] = $row; $pc->close(); }
 
 // Fetch Advisers and Sections
 $registries = [
@@ -496,8 +582,12 @@ function getRoomAssignment($roomNumber, $registries) {
     
     <!-- Toast Notification -->
     <?php if ($toast_message): ?>
-    <div id="toast" class="absolute top-4 right-4 z-50 bg-emerald-100 border border-emerald-400 text-emerald-800 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-bounce">
+    <div id="toast" class="absolute top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 <?php echo $toast_type === 'error' ? 'bg-rose-100 border border-rose-300 text-rose-800' : 'bg-emerald-100 border border-emerald-400 text-emerald-800'; ?>">
+        <?php if ($toast_type === 'error'): ?>
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path></svg>
+        <?php else: ?>
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+        <?php endif; ?>
         <span class="font-bold text-sm"><?php echo htmlspecialchars($toast_message); ?></span>
     </div>
     <script>
@@ -641,9 +731,10 @@ function getRoomAssignment($roomNumber, $registries) {
                                     <span class="text-xs font-bold text-slate-700 tracking-wide truncate"><?php echo htmlspecialchars($item['name']); ?></span>
                                 </div>
                                 
-                                <form action="?page=system_settings" method="POST" class="shrink-0" onsubmit="return confirm('Are you sure you want to delete this item?');">
+                                <form action="?page=system_settings" method="POST" class="shrink-0 confirm-action-form" data-confirm-message="Are you sure you want to delete this item?">
                                     <input type="hidden" name="action" value="delete_registry">
                                     <input type="hidden" name="id" value="<?php echo $item['id']; ?>">
+                                    <input type="hidden" name="category" value="<?php echo htmlspecialchars($cat_key); ?>">
                                     <button type="submit" class="text-slate-300 hover:text-red-500 transition-colors p-1" title="Delete">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                     </button>
@@ -774,7 +865,7 @@ function getRoomAssignment($roomNumber, $registries) {
                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                                     Map
                                 </button>
-                                <form method="POST" action="?page=system_settings" onsubmit="return confirm('Remove?')" class="inline">
+                                <form method="POST" action="?page=system_settings" class="inline confirm-action-form" data-confirm-message="Remove this facility?">
                                     <input type="hidden" name="action" value="delete_facility">
                                     <input type="hidden" name="facility_id" value="<?php echo (int)$fc['id']; ?>">
                                     <button type="submit" class="text-slate-300 hover:text-red-500 transition-colors p-1">
@@ -811,7 +902,7 @@ function getRoomAssignment($roomNumber, $registries) {
                                 Bldg <?php echo htmlspecialchars($ae['building_number']); ?> · Floor <?php echo htmlspecialchars($ae['floor_number']); ?> · Room <?php echo htmlspecialchars($ae['room_number']); ?>
                             </div>
                         </div>
-                        <form method="POST" action="?page=system_settings" onsubmit="return confirm('Remove?')">
+                        <form method="POST" action="?page=system_settings" class="confirm-action-form" data-confirm-message="Remove this annex entry?">
                             <input type="hidden" name="action" value="delete_annex">
                             <input type="hidden" name="annex_id" value="<?php echo (int)$ae['id']; ?>">
                             <button type="submit" class="text-indigo-300 hover:text-red-500 transition-colors">
@@ -883,7 +974,7 @@ function getRoomAssignment($roomNumber, $registries) {
                                 </label>
                             </form>
                             <?php if ($has): ?>
-                            <form method="POST" action="?page=system_settings" onsubmit="return confirm('Remove this image?')">
+                            <form method="POST" action="?page=system_settings" class="confirm-action-form" data-confirm-message="Remove this image?">
                                 <input type="hidden" name="action" value="remove_theme_asset">
                                 <input type="hidden" name="asset_key" value="<?php echo $key; ?>">
                                 <button type="submit" class="w-full px-3 py-2 rounded-xl bg-red-50 text-red-600 text-xs font-bold hover:bg-red-100 transition-colors">Remove</button>
@@ -907,111 +998,303 @@ function getRoomAssignment($roomNumber, $registries) {
                 <div class="flex flex-col gap-1">
                     <div class="flex items-center gap-2">
                         <svg class="w-6 h-6 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
-                        <h2 class="text-2xl font-heading font-black text-dranhs-dark uppercase tracking-tight">Curriculum Visibility Mapping</h2>
+                        <h2 class="text-2xl font-heading font-black text-dranhs-dark uppercase tracking-tight">Curriculum Catalog</h2>
                     </div>
-                    <p class="text-sm font-bold text-slate-400 tracking-widest uppercase">Select which career pathways are active for Grade 11</p>
+                    <p class="text-sm font-bold text-slate-400 tracking-widest uppercase">Manage Grade 11 career pathways and Grade 12 strands with code, description, and electives.</p>
+                </div>
+                <button type="button" onclick="openCurriculumModal()" class="bg-violet-600 hover:bg-violet-700 text-white font-bold uppercase tracking-widest text-xs px-5 py-3 rounded-xl shadow-lg shadow-violet-500/20 transition-transform hover:-translate-y-0.5 flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    Add Pathway / Strand
+                </button>
+            </div>
+
+            <div class="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <table class="min-w-full text-left text-sm border-collapse">
+                    <thead class="bg-slate-50 text-slate-500 uppercase text-xs tracking-wider font-bold">
+                        <tr>
+                            <th class="px-5 py-3">Grade</th>
+                            <th class="px-5 py-3">Category</th>
+                            <th class="px-5 py-3">Track</th>
+                            <th class="px-5 py-3">Pathway / Strand</th>
+                            <th class="px-5 py-3">Code</th>
+                            <th class="px-5 py-3">Status</th>
+                            <th class="px-5 py-3">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        <?php if (empty($pathway_catalog)): ?>
+                        <tr>
+                            <td colspan="7" class="px-5 py-10 text-center text-slate-400 font-bold">No curriculum catalog entries found. Add one to begin.</td>
+                        </tr>
+                        <?php else: ?>
+                            <?php foreach ($pathway_catalog as $entry): ?>
+                            <tr class="hover:bg-slate-50 transition-colors">
+                                <td class="px-5 py-4 font-semibold text-slate-700"><?php echo htmlspecialchars($entry['grade_level']); ?></td>
+                                <td class="px-5 py-4 text-slate-600"><?php echo htmlspecialchars($entry['category']); ?></td>
+                                <td class="px-5 py-4 text-slate-600"><?php echo htmlspecialchars($entry['track']); ?></td>
+                                <td class="px-5 py-4 text-slate-600"><?php echo htmlspecialchars($entry['pathway_strand']); ?></td>
+                                <td class="px-5 py-4 text-slate-600"><?php echo htmlspecialchars($entry['code']); ?></td>
+                                <td class="px-5 py-4 text-slate-600"><?php echo $entry['enabled'] ? '<span class="inline-flex px-2 py-1 rounded-full bg-emerald-100 text-emerald-700 text-[11px] uppercase tracking-[0.18em] font-bold">Active</span>' : '<span class="inline-flex px-2 py-1 rounded-full bg-slate-100 text-slate-600 text-[11px] uppercase tracking-[0.18em] font-bold">Inactive</span>'; ?></td>
+                                <td class="px-5 py-4">
+                                    <div class="flex items-center gap-2">
+                                        <button type="button" onclick="editCurriculumEntry(<?php echo (int)$entry['id']; ?>)" class="px-3 py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition-colors">Edit</button>
+                                        <form method="POST" action="?page=system_settings" class="inline confirm-action-form" data-confirm-message="Delete this curriculum entry?">
+                                            <input type="hidden" name="action" value="delete_curriculum">
+                                            <input type="hidden" name="id" value="<?php echo (int)$entry['id']; ?>">
+                                            <button type="submit" class="px-3 py-2 rounded-xl bg-rose-50 text-rose-600 text-xs font-bold hover:bg-rose-100 transition-colors">Delete</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="curriculum-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 p-4">
+                <div class="w-full max-w-3xl rounded-3xl bg-white shadow-2xl overflow-hidden">
+                    <div class="flex items-center justify-between p-5 border-b border-slate-200">
+                        <div>
+                            <h3 class="text-xl font-black text-slate-900 uppercase tracking-tight">Pathway / Strand Entry</h3>
+                            <p class="text-sm text-slate-500">Add or edit a Grade 11 career pathway or Grade 12 strand.</p>
+                        </div>
+                        <button type="button" onclick="closeCurriculumModal()" class="text-slate-400 hover:text-slate-700 transition-colors">✕</button>
+                    </div>
+                    <form method="POST" action="?page=system_settings" class="space-y-6 p-6" id="curriculum-entry-form">
+                        <input type="hidden" name="action" value="save_curriculum">
+                        <input type="hidden" name="id" id="curriculum-id" value="0">
+
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div class="space-y-2">
+                                <label class="text-xs font-bold uppercase tracking-widest text-slate-600">Grade Level</label>
+                                <select name="grade_level" id="curriculum-grade-level" onchange="syncCurriculumTrackOptions()" class="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:border-violet-500 outline-none">
+                                    <option value="">Select Grade</option>
+                                    <option value="Grade 11">Grade 11</option>
+                                    <option value="Grade 12">Grade 12</option>
+                                </select>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-xs font-bold uppercase tracking-widest text-slate-600">Category</label>
+                                <select name="category" id="curriculum-category" onchange="onCurriculumCategoryChange()" class="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:border-violet-500 outline-none">
+                                    <option value="Career Pathway">Career Pathway</option>
+                                    <option value="Strand">Strand</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div class="space-y-2">
+                                <label id="curriculum-track-label" class="text-xs font-bold uppercase tracking-widest text-slate-600">Track</label>
+                                <select name="track" id="curriculum-track" class="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:border-violet-500 outline-none">
+                                    <option value="">Select Track</option>
+                                </select>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-xs font-bold uppercase tracking-widest text-slate-600">Code</label>
+                                <input type="text" name="code" id="curriculum-code" class="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:border-violet-500 outline-none" placeholder="example: stem" required>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div class="space-y-2 lg:col-span-2">
+                                <label class="text-xs font-bold uppercase tracking-widest text-slate-600">Pathway / Strand Name</label>
+                                <input type="text" name="pathway_strand" id="curriculum-name" class="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:border-violet-500 outline-none" placeholder="Enter career pathway or strand name" required>
+                            </div>
+                        </div>
+
+                        <div class="space-y-2">
+                            <label class="text-xs font-bold uppercase tracking-widest text-slate-600">Description</label>
+                            <textarea name="description" id="curriculum-description" rows="4" class="w-full border border-slate-300 rounded-xl px-4 py-3 text-sm focus:border-violet-500 outline-none" placeholder="Optional description"></textarea>
+                        </div>
+
+                        <div id="curriculum-electives-section" class="space-y-3">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-xs font-bold uppercase tracking-widest text-slate-600">Electives</p>
+                                    <p class="text-xs text-slate-500">Add optional subject electives for this pathway or strand.</p>
+                                </div>
+                                <button type="button" onclick="addCurriculumElective('')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-colors">Add Elective</button>
+                            </div>
+                            <div id="curriculum-electives" class="space-y-2">
+                                <div class="text-xs uppercase tracking-[0.2em] text-slate-300 font-bold">No electives added yet.</div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-3">
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" name="enabled" id="curriculum-enabled" class="sr-only peer" checked>
+                                <div class="w-12 h-6 rounded-full bg-slate-200 peer-checked:bg-emerald-500 relative after:content-[''] after:absolute after:top-[3px] after:left-[3px] after:w-5 after:h-5 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full"></div>
+                            </label>
+                            <span class="text-sm font-semibold text-slate-700 uppercase tracking-widest">Active</span>
+                        </div>
+
+                        <div class="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                            <button type="button" onclick="closeCurriculumModal()" class="text-slate-500 hover:text-slate-900 font-bold uppercase tracking-widest text-xs">Cancel</button>
+                            <button type="submit" class="bg-violet-600 hover:bg-violet-700 text-white font-bold uppercase tracking-widest text-xs px-6 py-3 rounded-xl transition-transform hover:-translate-y-0.5">Save Entry</button>
+                        </div>
+                    </form>
                 </div>
             </div>
 
-            <?php
-            $curr_vis_saved = $settings['curriculum_structure'] ?? null;
-            $curriculum_configured = ($curr_vis_saved !== null);
-            $curr_vis = $curriculum_configured ? json_decode($curr_vis_saved, true) : [];
-            
-            $all_pathways = [
-                'Academic' => $curr_vis['Academic'] ?? [],
-                'Tech-Pro' => $curr_vis['Tech-Pro'] ?? [],
-                'ALS' => $curr_vis['ALS'] ?? []
-            ];
-            
-            $track_colors = [
-                'Academic' => 'emerald',
-                'Tech-Pro' => 'orange',
-                'ALS' => 'rose'
-            ];
-            ?>
-
-            <form action="?page=system_settings" method="POST" class="space-y-8" id="curriculumForm">
-                <input type="hidden" name="action" value="save_curriculum">
-                
-                <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                    <?php foreach ($all_pathways as $track => $path): $color = $track_colors[$track]; ?>
-                    <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-full" id="track-container-<?php echo $track; ?>">
-                        <div class="border-b-2 <?php echo 'border-'.$color.'-200'; ?> mb-4 pb-2 flex justify-between items-center shrink-0">
-                            <h3 class="text-sm font-black uppercase tracking-[0.1em] <?php echo 'text-'.$color.'-600'; ?> flex items-center gap-2">
-                                <span class="w-2 h-2 rounded-full <?php echo 'bg-'.$color.'-500'; ?> shrink-0"></span>
-                                <?php echo htmlspecialchars($track); ?> Track
-                            </h3>
-                            <button type="button" onclick="addPathwayRow('<?php echo htmlspecialchars($track, ENT_QUOTES); ?>', '<?php echo $color; ?>')" class="text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-<?php echo $color; ?>-600 transition-colors flex items-center gap-1 bg-slate-50 hover:bg-<?php echo $color; ?>-50 px-2 py-1 rounded-md">
-                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4"></path></svg> Add
-                            </button>
-                        </div>
-                        <div class="space-y-3 lg:max-h-[300px] overflow-y-auto sidebar-scroll pr-2 flex-grow" id="list-<?php echo htmlspecialchars($track, ENT_QUOTES); ?>">
-                            <?php foreach ($path as $idx => $pathway): 
-                                $uid = uniqid(); 
-                                $escaped_track = htmlspecialchars($track, ENT_QUOTES);
-                                $checked = (!empty($pathway['enabled'])) ? 'checked' : '';
-                            ?>
-                            <div class="flex items-center group bg-white border border-slate-100 p-2 rounded-xl transition-all hover:border-slate-300 gap-2 relative">
-                                <!-- Hidden input for icon -->
-                                <input type="hidden" name="cv[<?php echo $escaped_track; ?>][<?php echo $uid; ?>][icon]" value="<?php echo htmlspecialchars($pathway['icon'] ?? '', ENT_QUOTES); ?>">
-                                <!-- Name Input -->
-                                <input type="text" name="cv[<?php echo $escaped_track; ?>][<?php echo $uid; ?>][name]" value="<?php echo htmlspecialchars($pathway['name'] ?? '', ENT_QUOTES); ?>" class="flex-1 text-xs font-bold text-slate-700 uppercase tracking-wide bg-transparent border-none outline-none focus:ring-2 focus:ring-<?php echo $color; ?>-200 rounded px-1 w-full truncate" required>
-                                
-                                <div class="flex items-center gap-3 shrink-0">
-                                    <label class="relative inline-flex items-center cursor-pointer" title="Toggle Visibility">
-                                        <input type="checkbox" name="cv[<?php echo $escaped_track; ?>][<?php echo $uid; ?>][enabled]" value="1" class="sr-only peer" <?php echo $checked; ?>>
-                                        <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all <?php echo 'peer-checked:bg-'.$color.'-500'; ?>"></div>
-                                    </label>
-                                    <button type="button" onclick="this.closest('.group').remove()" class="text-slate-300 hover:text-red-500 transition-colors p-1 rounded-md hover:bg-red-50" title="Delete Pathway">
-                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                    </button>
-                                </div>
-                            </div>
-                            <?php endforeach; ?>
-                            <?php if(empty($path)): ?>
-                            <div class="text-[10px] uppercase tracking-widest text-slate-400 font-bold text-center py-4 border-2 border-dashed border-slate-200 rounded-xl empty-msg">No pathways added</div>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                    <?php endforeach; ?>
-                </div>
-
-                <div class="flex justify-end pt-4 border-t border-slate-100 mt-6">
-                    <button type="submit" class="bg-dranhs-dark hover:bg-slate-800 text-white font-bold py-3 px-8 rounded-lg shadow-md transition-transform hover:-translate-y-0.5 tracking-wider uppercase text-sm">Save Curriculum Matrix</button>
-                </div>
-            </form>
-
             <script>
-            function addPathwayRow(track, color) {
-                const list = document.getElementById('list-' + track);
-                const uid = 'new_' + Math.random().toString(36).substr(2, 9);
-                // Default generic book icon
-                const defaultIcon = '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>';
-                
-                // Clear the "No pathways added" message
-                const emptyMsg = list.querySelector('.empty-msg');
-                if(emptyMsg) emptyMsg.remove();
+            const curriculumTrackOptions = {
+                'Grade 11': {
+                    'Career Pathway': ['Academic', 'Tech-Pro', 'ALS'],
+                    'Strand': ['Academic', 'TVL']
+                },
+                'Grade 12': {
+                    'Career Pathway': ['Academic', 'Tech-Pro', 'TVL'],
+                    'Strand': ['Academic', 'TVL']
+                }
+            };
 
-                const rowHtml = `
-                    <div class="flex items-center group bg-blue-50 border border-blue-200 p-2 rounded-xl transition-all hover:border-blue-400 gap-2 relative animate-pulse" style="animation-iteration-count: 2;">
-                        <input type="hidden" name="cv[${track}][${uid}][icon]" value='${defaultIcon}'>
-                        <input type="text" name="cv[${track}][${uid}][name]" placeholder="Enter Pathway Name..." class="flex-1 text-xs font-black text-slate-800 uppercase tracking-wide bg-transparent border-none outline-none focus:ring-2 focus:ring-${color}-300 rounded px-1 w-full" required autofocus>
-                        
-                        <div class="flex items-center gap-3 shrink-0">
-                            <label class="relative inline-flex items-center cursor-pointer" title="Toggle Visibility">
-                                <input type="checkbox" name="cv[${track}][${uid}][enabled]" value="1" class="sr-only peer" checked>
-                                <div class="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-${color}-500"></div>
-                            </label>
-                            <button type="button" onclick="this.closest('.group').remove()" class="text-slate-400 hover:text-red-500 transition-colors p-1 rounded-md hover:bg-red-50">
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                            </button>
-                        </div>
-                    </div>
+            const gradeToCategory = {
+                'Grade 11': 'Career Pathway',
+                'Grade 12': 'Strand'
+            };
+
+            function openCurriculumModal(entry = null) {
+                const modal = document.getElementById('curriculum-modal');
+                const form = document.getElementById('curriculum-entry-form');
+                const gradeInput = document.getElementById('curriculum-grade-level');
+                const categoryInput = document.getElementById('curriculum-category');
+                const trackInput = document.getElementById('curriculum-track');
+                const nameInput = document.getElementById('curriculum-name');
+                const codeInput = document.getElementById('curriculum-code');
+                const descInput = document.getElementById('curriculum-description');
+                const enabledInput = document.getElementById('curriculum-enabled');
+                const idInput = document.getElementById('curriculum-id');
+                const electivesContainer = document.getElementById('curriculum-electives');
+
+                form.reset();
+                idInput.value = '0';
+                electivesContainer.innerHTML = '<div class="text-xs uppercase tracking-[0.2em] text-slate-300 font-bold">No electives added yet.</div>';
+                gradeInput.value = '';
+                categoryInput.value = 'Career Pathway';
+                fillTrackOptions('');
+                toggleCurriculumElectivesVisibility(categoryInput.value);
+                enabledInput.checked = true;
+
+                if (entry) {
+                    idInput.value = entry.id;
+                    gradeInput.value = entry.grade_level;
+                    categoryInput.value = entry.category;
+                    fillTrackOptions(entry.grade_level, entry.track, entry.category);
+                    toggleCurriculumElectivesVisibility(entry.category);
+                    nameInput.value = entry.pathway_strand;
+                    codeInput.value = entry.code;
+                    descInput.value = entry.description || '';
+                    enabledInput.checked = entry.enabled == 1 || entry.enabled === '1';
+                    if (entry.category !== 'Strand') {
+                        populateElectives(entry.electives);
+                    }
+                }
+
+                modal.classList.remove('hidden');
+            }
+
+            function closeCurriculumModal() {
+                document.getElementById('curriculum-modal').classList.add('hidden');
+            }
+
+            function setCurriculumTrackLabel(category) {
+                const label = document.getElementById('curriculum-track-label');
+                label.textContent = 'Track';
+            }
+
+            function toggleCurriculumElectivesVisibility(category) {
+                const electivesSection = document.getElementById('curriculum-electives-section');
+                const electivesContainer = document.getElementById('curriculum-electives');
+                if (!electivesSection || !electivesContainer) return;
+
+                if (category === 'Strand') {
+                    electivesSection.classList.add('hidden');
+                    electivesContainer.innerHTML = '<div class="text-xs uppercase tracking-[0.2em] text-slate-400 font-bold">Electives are not applicable for Strand entries.</div>';
+                } else {
+                    electivesSection.classList.remove('hidden');
+                    if (!electivesContainer.querySelector('input[name="electives[]"]')) {
+                        electivesContainer.innerHTML = '<div class="text-xs uppercase tracking-[0.2em] text-slate-300 font-bold">No electives added yet.</div>';
+                    }
+                }
+            }
+
+            function fillTrackOptions(gradeLevel, selected = '', category = 'Career Pathway') {
+                const track = document.getElementById('curriculum-track');
+                track.innerHTML = '<option value="">Select Track</option>';
+                const gradeOptions = curriculumTrackOptions[gradeLevel] || {};
+                let options = gradeOptions[category] || [];
+                if (selected && !options.includes(selected)) {
+                    options = [...options, selected];
+                }
+                options.forEach(opt => {
+                    const option = document.createElement('option');
+                    option.value = opt;
+                    option.textContent = opt;
+                    if (opt === selected) option.selected = true;
+                    track.appendChild(option);
+                });
+                setCurriculumTrackLabel(category);
+            }
+
+            function syncCurriculumTrackOptions() {
+                const gradeValue = document.getElementById('curriculum-grade-level').value;
+                const categoryInput = document.getElementById('curriculum-category');
+                categoryInput.value = gradeToCategory[gradeValue] || categoryInput.value || 'Career Pathway';
+                fillTrackOptions(gradeValue, '', categoryInput.value);
+                toggleCurriculumElectivesVisibility(categoryInput.value);
+            }
+
+            function onCurriculumCategoryChange() {
+                const gradeValue = document.getElementById('curriculum-grade-level').value;
+                const categoryValue = document.getElementById('curriculum-category').value;
+                fillTrackOptions(gradeValue, '', categoryValue);
+                toggleCurriculumElectivesVisibility(categoryValue);
+            }
+
+            function addCurriculumElective(value = '') {
+                const container = document.getElementById('curriculum-electives');
+                const noElectiveMsg = container.querySelector('.text-xs');
+                if (noElectiveMsg) noElectiveMsg.remove();
+
+                const row = document.createElement('div');
+                row.className = 'flex gap-3 items-center';
+                row.innerHTML = `
+                    <input type="text" name="electives[]" value="${value.replace(/"/g, '&quot;')}" placeholder="Elective subject" class="flex-1 border border-slate-300 rounded-xl px-4 py-3 text-sm focus:border-violet-500 outline-none">
+                    <button type="button" onclick="removeCurriculumElective(this)" class="bg-rose-50 text-rose-600 px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-rose-100 transition-colors">Remove</button>
                 `;
-                list.insertAdjacentHTML('beforeend', rowHtml);
-                const input = list.lastElementChild.querySelector('input[type="text"]');
-                if (input) input.focus();
+                container.appendChild(row);
+            }
+
+            function removeCurriculumElective(button) {
+                const item = button.closest('div');
+                if (item) item.remove();
+                const container = document.getElementById('curriculum-electives');
+                if (!container.querySelector('input[name="electives[]"]')) {
+                    container.innerHTML = '<div class="text-xs uppercase tracking-[0.2em] text-slate-300 font-bold">No electives added yet.</div>';
+                }
+            }
+
+            function populateElectives(raw) {
+                const container = document.getElementById('curriculum-electives');
+                container.innerHTML = '';
+                let values = [];
+                try {
+                    values = typeof raw === 'string' ? JSON.parse(raw || '[]') : raw || [];
+                } catch (err) {
+                    values = [];
+                }
+                if (!Array.isArray(values) || values.length === 0) {
+                    container.innerHTML = '<div class="text-xs uppercase tracking-[0.2em] text-slate-300 font-bold">No electives added yet.</div>';
+                    return;
+                }
+                values.forEach(val => addCurriculumElective(val));
+            }
+
+            function editCurriculumEntry(id) {
+                const entry = <?php echo json_encode($pathway_catalog); ?>.find(item => parseInt(item.id, 10) === id);
+                if (!entry) return;
+                openCurriculumModal(entry);
             }
             </script>
         </div>
@@ -1574,6 +1857,29 @@ function getRoomAssignment($roomNumber, $registries) {
 </div>
 
 
+<div id="confirm-action-modal" class="fixed inset-0 z-[120] hidden items-center justify-center p-4" style="background:rgba(15,23,42,0.7);backdrop-filter:blur(6px);">
+    <div id="confirm-action-modal-panel" class="w-full max-w-md rounded-[2rem] bg-white shadow-2xl border border-slate-200 overflow-hidden transform scale-95 opacity-0 transition-all duration-200">
+        <div class="px-6 py-5 bg-gradient-to-r from-rose-500 to-orange-400 text-white">
+            <div class="flex items-start gap-4">
+                <div class="w-11 h-11 rounded-2xl bg-white/15 flex items-center justify-center shrink-0">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 8v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"></path></svg>
+                </div>
+                <div>
+                    <p class="text-[11px] font-black uppercase tracking-[0.25em] text-white/80">Confirm Action</p>
+                    <h3 id="confirm-action-title" class="text-xl font-heading font-black mt-1">Please Confirm</h3>
+                </div>
+            </div>
+        </div>
+        <div class="px-6 py-6">
+            <p id="confirm-action-message" class="text-sm leading-relaxed text-slate-600 font-semibold">Are you sure you want to continue?</p>
+        </div>
+        <div class="px-6 pb-6 flex items-center justify-end gap-3">
+            <button type="button" id="confirm-action-cancel" class="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 text-sm font-bold hover:bg-slate-50 transition-colors">Cancel</button>
+            <button type="button" id="confirm-action-submit" class="px-5 py-2.5 rounded-xl bg-rose-500 text-white text-sm font-black uppercase tracking-widest hover:bg-rose-600 shadow-lg shadow-rose-500/20 transition-colors">Confirm</button>
+        </div>
+    </div>
+</div>
+
 <script>
     // Tab switching
     function switchTab(tabId) {
@@ -1611,6 +1917,33 @@ function getRoomAssignment($roomNumber, $registries) {
     // Modal behavior
     const mapModal = document.getElementById('map-modal');
     const mapContent = document.getElementById('map-modal-content');
+    const confirmActionModal = document.getElementById('confirm-action-modal');
+    const confirmActionPanel = document.getElementById('confirm-action-modal-panel');
+    const confirmActionMessage = document.getElementById('confirm-action-message');
+    const confirmActionCancel = document.getElementById('confirm-action-cancel');
+    const confirmActionSubmit = document.getElementById('confirm-action-submit');
+    let pendingConfirmForm = null;
+
+    function openConfirmActionModal(form) {
+        pendingConfirmForm = form;
+        if (confirmActionMessage) {
+            confirmActionMessage.textContent = form.dataset.confirmMessage || 'Are you sure you want to continue?';
+        }
+        confirmActionModal.classList.remove('hidden');
+        confirmActionModal.classList.add('flex');
+        requestAnimationFrame(() => {
+            confirmActionPanel.classList.remove('scale-95', 'opacity-0');
+        });
+    }
+
+    function closeConfirmActionModal() {
+        pendingConfirmForm = null;
+        confirmActionPanel.classList.add('scale-95', 'opacity-0');
+        setTimeout(() => {
+            confirmActionModal.classList.add('hidden');
+            confirmActionModal.classList.remove('flex');
+        }, 200);
+    }
     
     function openFacilityMapModal(facilityId, facilityName) {
         // Reuse the same building map modal, switch to facility mode
@@ -1675,9 +2008,48 @@ function getRoomAssignment($roomNumber, $registries) {
             switchTab(savedTab);
         }
 
+        document.querySelectorAll('.confirm-action-form').forEach((form) => {
+            form.addEventListener('submit', (event) => {
+                if (form.dataset.confirmed === 'true') {
+                    form.dataset.confirmed = 'false';
+                    return;
+                }
+                event.preventDefault();
+                openConfirmActionModal(form);
+            });
+        });
+
         // Annex modal
         const annexModal   = document.getElementById('annex-modal');
         const facilityModal = document.getElementById('facility-modal');
+
+        if (confirmActionCancel) {
+            confirmActionCancel.addEventListener('click', closeConfirmActionModal);
+        }
+
+        if (confirmActionModal) {
+            confirmActionModal.addEventListener('click', (event) => {
+                if (event.target === confirmActionModal) {
+                    closeConfirmActionModal();
+                }
+            });
+        }
+
+        if (confirmActionSubmit) {
+            confirmActionSubmit.addEventListener('click', () => {
+                if (!pendingConfirmForm) return;
+                pendingConfirmForm.dataset.confirmed = 'true';
+                const formToSubmit = pendingConfirmForm;
+                closeConfirmActionModal();
+                formToSubmit.requestSubmit();
+            });
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && confirmActionModal && !confirmActionModal.classList.contains('hidden')) {
+                closeConfirmActionModal();
+            }
+        });
 
         document.getElementById('open-annex-modal').addEventListener('click', () => {
             annexModal.classList.remove('hidden');

@@ -1,6 +1,40 @@
 <?php
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/pathway_strand_catalog.php';
 $conn = db_connect();
+
+$catalog = load_pathway_strand_catalog();
+$grade11_items = $catalog['grade_11'] ?? [];
+$g11_pathways_by_track = [
+    'Academic' => [],
+    'Tech-Pro' => [],
+    'ALS' => []
+];
+foreach ($grade11_items as $item) {
+    if (empty($item['enabled'])) {
+        continue;
+    }
+
+    $track = trim((string)($item['track'] ?? ''));
+    $label = trim((string)($item['label'] ?? ''));
+    if ($track === '' || $label === '') {
+        continue;
+    }
+
+    if ($track === 'TVL') {
+        $track = 'Tech-Pro';
+    }
+
+    if (!isset($g11_pathways_by_track[$track])) {
+        continue;
+    }
+
+    $g11_pathways_by_track[$track][] = $label;
+}
+
+foreach ($g11_pathways_by_track as $track => $labels) {
+    $g11_pathways_by_track[$track] = array_values(array_unique($labels));
+}
 
 $school_year = '2026 - 2027';
 $semester = 'term_1';
@@ -65,6 +99,7 @@ if (!$conn->connect_error) {
         const PREVIOUS_SCHOOL_YEAR = '<?php echo addslashes($previous_school_year); ?>';
         const G10_SECTIONS = <?php echo json_encode($g10_sections); ?>;
         const G11_SECTIONS = <?php echo json_encode($g11_sections); ?>;
+        window.DYNAMIC_PATHWAYS_DATA = <?php echo json_encode($g11_pathways_by_track); ?>;
     </script>
     <style type="text/tailwindcss">
         .form-section { @apply bg-white rounded-2xl shadow-sm border border-slate-200 p-6 lg:p-8 mb-6 relative overflow-hidden; }
@@ -437,6 +472,7 @@ if (!$conn->connect_error) {
                             <option value="">Select Track...</option>
                             <option value="Academic">Academic</option>
                             <option value="Tech-Pro">Tech-Pro</option>
+                            <option value="ALS">ALS</option>
                         </select>
                         <input type="hidden" name="track" id="g11-track-hidden">
                     </div>
@@ -444,21 +480,6 @@ if (!$conn->connect_error) {
                         <label class="form-label">Career Pathway</label>
                         <select class="form-input acad-input" id="g11-pathway" disabled>
                             <option value="">Select Pathway...</option>
-                            <option value="Medical & Allied Health">Medical & Allied Health</option>
-                            <option value="Engineering & Aviation">Engineering & Aviation</option>
-                            <option value="Earth, Space & Weather Science">Earth, Space & Weather Science</option>
-                            <option value="Pre-Law & Public Governance">Pre-Law & Public Governance</option>
-                            <option value="Criminology & Uniformed Services">Criminology & Uniformed Services</option>
-                            <option value="Teacher Ed (Lang/Social Sci)">Teacher Ed (Lang/Social Sci)</option>
-                            <option value="Social Work & Community Dev.">Social Work & Community Dev.</option>
-                            <option value="Digital Media & Creative Arts">Digital Media & Creative Arts</option>
-                            <option value="Accountancy & Financial Mgmt.">Accountancy & Financial Mgmt.</option>
-                            <option value="Entrepreneurship & Innovation">Entrepreneurship & Innovation</option>
-                            <option value="FITNESS AND ATHLETICS DEVELOPMENT">FITNESS AND ATHLETICS DEVELOPMENT</option>
-                            <option value="ICT (Computer Systems Servicing)">ICT (Computer Systems Servicing)</option>
-                            <option value="Industrial (Electrical Installation)">Industrial (Electrical Installation)</option>
-                            <option value="Kitchen Operations (Cookery)">Kitchen Operations (Cookery)</option>
-                            <option value="Aesthetic Services (Beauty Care)">Aesthetic Services (Beauty Care)</option>
                         </select>
                         <input type="hidden" name="pathway" id="g11-pathway-hidden">
                     </div>
@@ -524,6 +545,7 @@ if (!$conn->connect_error) {
 
             if(track) {
                 trackSelect.value = track;
+                trackSelect.dispatchEvent(new Event('change', { bubbles: true }));
                 if (studentTypeSelect) {
                     if (track === 'ALS') {
                         studentTypeSelect.innerHTML = '<option value="ALS" selected>ALS (Alternative Learning System)</option>';
@@ -536,7 +558,10 @@ if (!$conn->connect_error) {
                     }
                 }
             }
-            if(pathway) pathwaySelect.value = pathway;
+            if(pathway && pathwaySelect.querySelector(`option[value="${pathway}"]`)) {
+                pathwaySelect.value = pathway;
+                pathwaySelect.dispatchEvent(new Event('change', { bubbles: true }));
+            }
 
             // Handle student type change for previous school info
             studentTypeSelect.addEventListener('change', function() {

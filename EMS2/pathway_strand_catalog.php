@@ -1,9 +1,62 @@
 <?php
 
+function load_pathway_strand_catalog_from_db() {
+    static $catalog = null;
+    if ($catalog !== null) {
+        return $catalog;
+    }
+
+    if (!class_exists('mysqli')) {
+        $catalog = ['grade_11' => [], 'grade_12' => []];
+        return $catalog;
+    }
+
+    require_once __DIR__ . '/db.php';
+    $conn = @new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME, DB_PORT);
+    if ($conn->connect_error) {
+        $catalog = ['grade_11' => [], 'grade_12' => []];
+        return $catalog;
+    }
+
+    $catalog = ['grade_11' => [], 'grade_12' => []];
+    $result = $conn->query("SELECT grade_level, category, track, pathway_strand, code, description, electives, enabled FROM pathway_strand ORDER BY FIELD(grade_level,'Grade 11','Grade 12'), category, track, pathway_strand");
+    if ($result) {
+        while ($row = $result->fetch_assoc()) {
+            $grade_key = pathway_strand_grade_key($row['grade_level'] ?? '');
+            if ($grade_key === '') {
+                continue;
+            }
+            $electives = null;
+            if (!empty($row['electives'])) {
+                $decoded = json_decode($row['electives'], true);
+                $electives = is_array($decoded) ? array_values($decoded) : [];
+            }
+            $catalog[$grade_key][] = [
+                'track' => $row['track'] ?? '',
+                'label' => $row['pathway_strand'] ?? '',
+                'code' => $row['code'] ?? '',
+                'description' => $row['description'] ?? '',
+                'electives' => $electives,
+                'enabled' => !empty($row['enabled']),
+                'category' => $row['category'] ?? ''
+            ];
+        }
+        $result->close();
+    }
+
+    $conn->close();
+    return $catalog;
+}
+
 function load_pathway_strand_catalog() {
     static $catalog = null;
 
     if ($catalog !== null) {
+        return $catalog;
+    }
+
+    $catalog = load_pathway_strand_catalog_from_db();
+    if (!empty($catalog['grade_11']) || !empty($catalog['grade_12'])) {
         return $catalog;
     }
 
@@ -55,19 +108,18 @@ function load_curriculum_structure_config() {
 }
 
 function is_curriculum_option_enabled($grade_level, $track, $label) {
-    if (strcasecmp(trim((string)$grade_level), 'Grade 11') !== 0) {
+    $grade_key = pathway_strand_grade_key($grade_level);
+    if ($grade_key === '') {
         return true;
     }
 
-    $config = load_curriculum_structure_config();
-    $track_key = trim((string)$track);
-    if ($track_key === '' || !isset($config[$track_key]) || !is_array($config[$track_key])) {
-        return true;
-    }
-
-    foreach ($config[$track_key] as $item) {
-        if (!is_array($item) || !isset($item['name'])) continue;
-        if (strcasecmp((string)$item['name'], (string)$label) === 0) {
+    $catalog = load_pathway_strand_catalog();
+    $items = isset($catalog[$grade_key]) && is_array($catalog[$grade_key]) ? $catalog[$grade_key] : [];
+    foreach ($items as $item) {
+        if (!is_array($item) || !isset($item['label'])) {
+            continue;
+        }
+        if (strcasecmp((string)$item['label'], (string)$label) === 0 || strcasecmp((string)$item['code'], (string)$label) === 0) {
             return !empty($item['enabled']);
         }
     }
