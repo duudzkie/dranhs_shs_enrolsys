@@ -16,7 +16,55 @@ if (isset($conn) && $conn instanceof mysqli) {
 $curriculum_configured = ($curr_vis_saved !== null);
 $curriculum_structure = $curriculum_configured ? json_decode($curr_vis_saved, true) : [];
 
-$js_pathways = ['Academic' => [], 'Tech-Pro' => [], 'ALS' => []];
+require_once __DIR__ . '/../pathway_strand_catalog.php';
+$catalog = load_pathway_strand_catalog();
+$grade11_items = $catalog['grade_11'] ?? [];
+
+$pathways_by_track = [
+    'Academic' => [],
+    'Tech-Pro' => [],
+    'ALS' => []
+];
+$pathway_details = [];
+foreach ($grade11_items as $item) {
+    if (empty($item['enabled'])) {
+        continue;
+    }
+    $track = trim($item['track'] ?? '');
+    if ($track === '') {
+        continue;
+    }
+    if ($track === 'TVL') {
+        $track = 'Tech-Pro';
+    }
+    if (!isset($pathways_by_track[$track])) {
+        $pathways_by_track[$track] = [];
+    }
+
+    $entry = [
+        'name' => $item['label'] ?? '',
+        'description' => $item['description'] ?? '',
+        'electives' => !empty($item['electives']) ? array_values($item['electives']) : [],
+        'category' => $item['category'] ?? '',
+        'code' => $item['code'] ?? ''
+    ];
+
+    $pathways_by_track[$track][] = $entry;
+    if (!isset($pathway_details[$track])) {
+        $pathway_details[$track] = [];
+    }
+    $pathway_details[$track][$entry['name']] = [
+        'description' => $entry['description'],
+        'electives' => $entry['electives'],
+        'category' => $entry['category'],
+        'code' => $entry['code']
+    ];
+}
+
+$js_pathways = [];
+foreach ($pathways_by_track as $track => $items) {
+    $js_pathways[$track] = array_map(fn($entry) => $entry['name'], $items);
+}
 
 ?>
 <script>
@@ -196,15 +244,16 @@ $js_pathways = ['Academic' => [], 'Tech-Pro' => [], 'ALS' => []];
                 <!-- Academic Track Content (11 Pathways) -->
                 <div id="content-academic" class="grid grid-cols-1 md:grid-cols-2 gap-3 w-full">
                     <?php
-                        $acad_tracks = $curriculum_structure['Academic'] ?? [];
+                        $acad_tracks = $pathways_by_track['Academic'];
                         foreach($acad_tracks as $path) {
-                            if (empty($path['enabled'])) continue;
-                            $js_pathways['Academic'][] = $path['name'];
-                            echo '<button class="pathway-card relative flex bg-blue-900 border-2 border-transparent rounded-xl p-4 lg:p-5 cursor-pointer hover:border-emerald-400 hover:shadow-lg transition-all group items-center text-left" data-track="Academic" data-pathway="'.htmlspecialchars($path['name'], ENT_QUOTES).'">
-                                <div class="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mr-4 shrink-0 transition-transform group-hover:scale-110">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'.($path['icon'] ?? '').'</svg>
+                            echo '<button class="pathway-card relative flex flex-col gap-4 bg-blue-950 border-2 border-transparent rounded-3xl p-5 cursor-pointer hover:border-emerald-400 hover:bg-blue-900 hover:shadow-xl transition-all group text-left" data-track="Academic" data-pathway="'.htmlspecialchars($path['name'], ENT_QUOTES).'">
+                                <div class="flex items-center gap-4">
+                                    <span class="inline-flex items-center justify-center w-12 h-12 rounded-3xl bg-emerald-500/15 text-emerald-300 text-lg font-black">A</span>
+                                    <div>
+                                        <p class="text-[0.65rem] uppercase tracking-[0.3em] text-emerald-200 font-semibold">Academic</p>
+                                        <h4 class="font-black text-white text-base lg:text-lg leading-snug">'.htmlspecialchars($path['name']).'</h4>
+                                    </div>
                                 </div>
-                                <span class="font-bold text-slate-100 group-hover:text-emerald-300 group-hover:scale-[1.02] transform transition-transform uppercase text-[0.7rem] lg:text-[0.8rem] tracking-wide leading-snug">'.htmlspecialchars($path['name']).'</span>
                             </button>';
                         }
                     ?>
@@ -213,15 +262,16 @@ $js_pathways = ['Academic' => [], 'Tech-Pro' => [], 'ALS' => []];
                 <!-- Tech-Pro Track Content (4 Clusters) -->
                 <div id="content-techpro" class="grid grid-cols-1 md:grid-cols-2 gap-3 w-full hidden">
                     <?php
-                        $tech_tracks = $curriculum_structure['Tech-Pro'] ?? [];
+                        $tech_tracks = $pathways_by_track['Tech-Pro'];
                         foreach($tech_tracks as $path) {
-                            if (empty($path['enabled'])) continue;
-                            $js_pathways['Tech-Pro'][] = $path['name'];
-                            echo '<button class="pathway-card relative flex bg-amber-50 border-2 border-slate-200 rounded-xl p-4 lg:p-5 cursor-pointer hover:border-orange-500 hover:bg-orange-50 hover:shadow-lg transition-all group items-center text-left" data-track="Tech-Pro" data-pathway="'.htmlspecialchars($path['name'], ENT_QUOTES).'">
-                                <div class="w-10 h-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center mr-4 shrink-0 transition-transform group-hover:scale-110">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'.($path['icon'] ?? '').'</svg>
+                            echo '<button class="pathway-card relative flex flex-col gap-4 bg-amber-50 border-2 border-slate-200 rounded-3xl p-5 cursor-pointer hover:border-orange-500 hover:bg-orange-50 hover:shadow-xl transition-all group text-left" data-track="Tech-Pro" data-pathway="'.htmlspecialchars($path['name'], ENT_QUOTES).'">
+                                <div class="flex items-center gap-4">
+                                    <span class="inline-flex items-center justify-center w-12 h-12 rounded-3xl bg-orange-100 text-orange-700 text-lg font-black">TP</span>
+                                    <div>
+                                        <p class="text-[0.65rem] uppercase tracking-[0.3em] text-orange-600 font-semibold">Tech-Pro</p>
+                                        <h4 class="font-black text-orange-900 text-base lg:text-lg leading-snug">'.htmlspecialchars($path['name']).'</h4>
+                                    </div>
                                 </div>
-                                <span class="font-bold text-orange-900 group-hover:text-orange-700 group-hover:scale-[1.02] transform transition-transform uppercase text-[0.7rem] lg:text-[0.8rem] tracking-wide leading-snug">'.htmlspecialchars($path['name']).'</span>
                             </button>';
                         }
                     ?>
@@ -230,15 +280,16 @@ $js_pathways = ['Academic' => [], 'Tech-Pro' => [], 'ALS' => []];
                 <!-- ALS Track Content -->
                 <div id="content-als" class="grid grid-cols-1 md:grid-cols-2 gap-3 w-full hidden">
                     <?php
-                        $als_tracks = $curriculum_structure['ALS'] ?? [];
+                        $als_tracks = $pathways_by_track['ALS'];
                         foreach($als_tracks as $path) {
-                            if (empty($path['enabled'])) continue;
-                            $js_pathways['ALS'][] = $path['name'];
-                            echo '<button class="pathway-card relative flex bg-rose-50 border-2 border-slate-200 rounded-xl p-4 lg:p-5 cursor-pointer hover:border-rose-500 hover:bg-rose-100 hover:shadow-lg transition-all group items-center text-left" data-track="ALS" data-pathway="'.htmlspecialchars($path['name'], ENT_QUOTES).'">
-                                <div class="w-10 h-10 rounded-full bg-rose-200 text-rose-600 flex items-center justify-center mr-4 shrink-0 transition-transform group-hover:scale-110">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">'.($path['icon'] ?? '').'</svg>
+                            echo '<button class="pathway-card relative flex flex-col gap-4 bg-rose-50 border-2 border-slate-200 rounded-3xl p-5 cursor-pointer hover:border-rose-500 hover:bg-rose-100 hover:shadow-xl transition-all group text-left" data-track="ALS" data-pathway="'.htmlspecialchars($path['name'], ENT_QUOTES).'">
+                                <div class="flex items-center gap-4">
+                                    <span class="inline-flex items-center justify-center w-12 h-12 rounded-3xl bg-rose-200 text-rose-700 text-lg font-black">AL</span>
+                                    <div>
+                                        <p class="text-[0.65rem] uppercase tracking-[0.3em] text-rose-600 font-semibold">ALS</p>
+                                        <h4 class="font-black text-rose-900 text-base lg:text-lg leading-snug">'.htmlspecialchars($path['name']).'</h4>
+                                    </div>
                                 </div>
-                                <span class="font-bold text-rose-900 group-hover:text-rose-700 group-hover:scale-[1.02] transform transition-transform uppercase text-[0.7rem] lg:text-[0.8rem] tracking-wide leading-snug">'.htmlspecialchars($path['name']).'</span>
                             </button>';
                         }
                     ?>
@@ -246,6 +297,7 @@ $js_pathways = ['Academic' => [], 'Tech-Pro' => [], 'ALS' => []];
                 <!-- Re-inject updated JS Pathways -->
                 <script>
                     window.DYNAMIC_PATHWAYS_DATA = <?php echo json_encode($js_pathways); ?>;
+                    window.PATHWAY_CATALOG_DETAILS = <?php echo json_encode($pathway_details); ?>;
                 </script>
             </div>
 

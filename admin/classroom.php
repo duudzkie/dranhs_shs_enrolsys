@@ -25,9 +25,18 @@ if (!$conn->connect_error) {
         max_capacity INT NOT NULL DEFAULT 40,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )");
-    $conn->query("ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS adviser_id INT NULL AFTER section_name");
-    $conn->query("ALTER TABLE classrooms ADD COLUMN IF NOT EXISTS adviser_name VARCHAR(150) NULL AFTER adviser_id");
-    $conn->query("ALTER TABLE students ADD COLUMN IF NOT EXISTS assigned_section VARCHAR(100)");
+    $classroom_adviser_id_check = $conn->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='" . $conn->real_escape_string(DB_NAME) . "' AND TABLE_NAME='classrooms' AND COLUMN_NAME='adviser_id'");
+    if ($classroom_adviser_id_check && $classroom_adviser_id_check->num_rows === 0) {
+        $conn->query("ALTER TABLE classrooms ADD COLUMN adviser_id INT NULL AFTER section_name");
+    }
+    $classroom_adviser_name_check = $conn->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='" . $conn->real_escape_string(DB_NAME) . "' AND TABLE_NAME='classrooms' AND COLUMN_NAME='adviser_name'");
+    if ($classroom_adviser_name_check && $classroom_adviser_name_check->num_rows === 0) {
+        $conn->query("ALTER TABLE classrooms ADD COLUMN adviser_name VARCHAR(150) NULL AFTER adviser_id");
+    }
+    $student_assigned_section_check = $conn->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='" . $conn->real_escape_string(DB_NAME) . "' AND TABLE_NAME='students' AND COLUMN_NAME='assigned_section'");
+    if ($student_assigned_section_check && $student_assigned_section_check->num_rows === 0) {
+        $conn->query("ALTER TABLE students ADD COLUMN assigned_section VARCHAR(100)");
+    }
     // Add group_chat_url safely — check first to support MySQL 5.7
     $col_check = $conn->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='" . $conn->real_escape_string(DB_NAME) . "' AND TABLE_NAME='classrooms' AND COLUMN_NAME='group_chat_url'");
     if ($col_check && $col_check->num_rows === 0) {
@@ -1246,7 +1255,7 @@ document.querySelectorAll('.cr-masterlist-btn').forEach(btn => btn.addEventListe
                         ? '<span class="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-bold">Enrolled</span>'
                         : '<span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">For Encoding</span>';
                     const redFlagBadge = watchIssueType
-                        ? `<span class="text-red-600 font-bold uppercase tracking-wide" title="${watchIssueDetails ? watchIssueDetails.replace(/"/g, '&quot;') : 'No additional notes provided in the watchlist.'}">FLAGGED</span>`
+                        ? `<span class="inline-flex items-center gap-1 text-red-600 font-bold uppercase tracking-wide" title="${watchIssueDetails ? watchIssueDetails.replace(/"/g, '&quot;') : 'No additional notes provided in the Focus List.'}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M7 6v14l5-5 5 5V6"/></svg>FLAGGED</span>`
                         : '<span class="text-slate-300 font-semibold">--</span>';
                     return `<tr class="hover:bg-slate-50">
                         <td class="px-4 py-3 text-slate-400 font-semibold">${rowNumber}</td>

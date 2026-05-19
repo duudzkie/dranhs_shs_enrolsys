@@ -346,15 +346,15 @@ if (!$list_conn->connect_error) {
                     $toast_msg = 'LRN must be exactly 12 digits.';
                     $toast_type = 'error';
                 } elseif ($lrn !== '' && student_exists_by_lrn($list_conn, $lrn)) {
-                    $toast_msg = 'LRN already exists in the student table. Watchlist entry was not added.';
+                    $toast_msg = 'LRN already exists in the student table. Focus List entry was not added.';
                     $toast_type = 'error';
                 } elseif ($lrn !== '' && record_exists_by_lrn($list_conn, 'watchlist', $lrn, $school_year)) {
-                    $toast_msg = 'Duplicate LRN found. Watchlist entry was not added again.';
+                    $toast_msg = 'Duplicate LRN found. Focus List entry was not added again.';
                     $toast_type = 'error';
                 } else {
                     $s = $list_conn->prepare("INSERT INTO watchlist (last_name,first_name,middle_name,lrn,issue_type,issue_details,school_year,added_by) VALUES (?,?,?,?,?,?,?,?)");
                     if ($s) { $s->bind_param("sssssssi",$ln,$fn,$mn,$lrn,$it,$id2,$school_year,$uid); $s->execute(); $s->close(); }
-                    $toast_msg = 'Watchlist entry added.';
+                    $toast_msg = 'Focus List entry added.';
                 }
             }
         } elseif ($action === 'delete_watch') {
@@ -383,7 +383,7 @@ if (!$list_conn->connect_error) {
                     if ($s) { $s->bind_param("sssssssi",$ln,$fn,$mn,$lrn,$it,$id2,$school_year,$uid); $s->execute(); $s->close(); $count++; }
                 }
                 fclose($handle);
-                $toast_msg = "$count watchlist entr" . ($count === 1 ? 'y' : 'ies') . " imported.";
+                $toast_msg = "$count Focus List entr" . ($count === 1 ? 'y' : 'ies') . " imported.";
                 if ($duplicate_count > 0 || $invalid_lrn_count > 0 || $student_duplicate_count > 0) {
                     $toast_msg .= " Skipped $duplicate_count duplicate(s), $student_duplicate_count existing student LRN row(s), and $invalid_lrn_count invalid LRN row(s).";
                 }
@@ -398,12 +398,32 @@ if (!$list_conn->connect_error) {
     if ($r) { while ($row=$r->fetch_assoc()) $g11_sections[] = $row['name']; $r->close(); }
 
     // Fetch all
-    $r = $list_conn->query("SELECT * FROM stem_qualifiers ORDER BY pathway_cluster, last_name, first_name");
-    if ($r) { while ($row=$r->fetch_assoc()) $stem_rows[]=$row; $r->close(); }
-    $r = $list_conn->query("SELECT * FROM g11_completers ORDER BY last_name, first_name");
-    if ($r) { while ($row=$r->fetch_assoc()) $g11_rows[]=$row; $r->close(); }
-    $r = $list_conn->query("SELECT * FROM watchlist ORDER BY last_name, first_name");
-    if ($r) { while ($row=$r->fetch_assoc()) $watch_rows[]=$row; $r->close(); }
+    $stem_stmt = $list_conn->prepare("SELECT * FROM stem_qualifiers WHERE school_year = ? ORDER BY pathway_cluster, last_name, first_name");
+    if ($stem_stmt) {
+        $stem_stmt->bind_param("s", $school_year);
+        $stem_stmt->execute();
+        $r = $stem_stmt->get_result();
+        if ($r) { while ($row = $r->fetch_assoc()) $stem_rows[] = $row; $r->close(); }
+        $stem_stmt->close();
+    }
+
+    $g11_stmt = $list_conn->prepare("SELECT * FROM g11_completers WHERE school_year = ? ORDER BY last_name, first_name");
+    if ($g11_stmt) {
+        $g11_stmt->bind_param("s", $school_year);
+        $g11_stmt->execute();
+        $r = $g11_stmt->get_result();
+        if ($r) { while ($row = $r->fetch_assoc()) $g11_rows[] = $row; $r->close(); }
+        $g11_stmt->close();
+    }
+
+    $watch_stmt = $list_conn->prepare("SELECT * FROM watchlist WHERE school_year = ? ORDER BY last_name, first_name");
+    if ($watch_stmt) {
+        $watch_stmt->bind_param("s", $school_year);
+        $watch_stmt->execute();
+        $r = $watch_stmt->get_result();
+        if ($r) { while ($row = $r->fetch_assoc()) $watch_rows[] = $row; $r->close(); }
+        $watch_stmt->close();
+    }
     $list_conn->close();
 }
 
@@ -418,6 +438,11 @@ foreach ($g11_rows as $row) {
     $section_name = trim((string)($row['section'] ?? ''));
     if ($section_name !== '' && !in_array($section_name, $g11_card_sections, true)) {
         $g11_card_sections[] = $section_name;
+    }
+}
+foreach ($g11_rows as $row) {
+    if (trim((string)($row['section'] ?? '')) === '' && !in_array('Unassigned', $g11_card_sections, true)) {
+        $g11_card_sections[] = 'Unassigned';
     }
 }
 
@@ -442,14 +467,14 @@ foreach ($g11_rows as $row) {
 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
     <div class="px-6 py-5 border-b border-slate-100">
         <h2 class="text-2xl font-heading font-black text-dranhs-dark">Academic Lists</h2>
-        <p class="text-sm text-slate-500 mt-1">Manage STEM qualifiers, Grade 11 completers, and watchlist entries for <?php echo htmlspecialchars($school_year); ?>.</p>
+        <p class="text-sm text-slate-500 mt-1">Manage STEM qualifiers, Grade 11 completers, and Focus List entries for <?php echo htmlspecialchars($school_year); ?>.</p>
     </div>
 
     <div class="border-b border-slate-100 bg-slate-50 px-4">
         <div class="flex flex-wrap gap-2 py-3">
             <button type="button" class="list-tab-btn px-4 py-2 rounded-lg text-sm font-bold bg-dranhs-green text-white" data-tab="stem">STEM Qualifiers</button>
             <button type="button" class="list-tab-btn px-4 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200" data-tab="g11">Grade 11 Completers</button>
-            <button type="button" class="list-tab-btn px-4 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200" data-tab="watch">Watchlist</button>
+            <button type="button" class="list-tab-btn px-4 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-200" data-tab="watch">Focus List</button>
         </div>
     </div>
 
@@ -683,23 +708,23 @@ foreach ($g11_rows as $row) {
             <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
                 <div class="xl:col-span-1">
                     <div class="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                        <h3 class="text-lg font-heading font-black text-dranhs-dark">Add Watchlist Entry</h3>
+                        <h3 class="text-lg font-heading font-black text-dranhs-dark">Add Focus List Entry</h3>
                         <form method="POST" class="mt-4 space-y-3">
                             <input type="hidden" name="list_action" value="add_watch">
                             <input name="last_name" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm" placeholder="Last Name" required>
                             <input name="first_name" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm" placeholder="First Name" required>
                             <input name="middle_name" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm" placeholder="Middle Name">
                             <input name="lrn" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm" placeholder="LRN">
-                            <input name="issue_type" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm" placeholder="Issue Type">
-                            <textarea name="issue_details" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm min-h-[120px]" placeholder="Issue Details"></textarea>
-                            <button type="submit" class="w-full rounded-xl bg-dranhs-green text-white py-3 text-sm font-bold hover:bg-emerald-700 transition-colors">Save Watchlist Entry</button>
+                            <input name="issue_type" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm" placeholder="Flag Reason / Issue Type">
+                            <textarea name="issue_details" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm min-h-[120px]" placeholder="Flag Description / Issue Details"></textarea>
+                            <button type="submit" class="w-full rounded-xl bg-dranhs-green text-white py-3 text-sm font-bold hover:bg-emerald-700 transition-colors">Save Focus List Entry</button>
                         </form>
                         <div class="mt-6 pt-5 border-t border-slate-200">
                             <div class="flex items-center justify-between gap-3">
                                 <h4 class="text-sm font-black uppercase tracking-wider text-slate-600">Import CSV</h4>
                                 <a
                                     href="data:text/csv;charset=utf-8,<?php echo rawurlencode($csv_templates['watch']); ?>"
-                                    download="watchlist_template.csv"
+                                    download="focus_list_template.csv"
                                     class="inline-flex items-center rounded-lg border border-slate-300 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-white transition-colors"
                                 >
                                     Download Template
@@ -710,7 +735,7 @@ foreach ($g11_rows as $row) {
                             <form method="POST" enctype="multipart/form-data" class="mt-3 space-y-3">
                                 <input type="hidden" name="list_action" value="csv_watch">
                                 <input type="file" name="csv_file" accept=".csv" class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm bg-white" required>
-                                <button type="submit" class="w-full rounded-xl border border-dranhs-green text-dranhs-green py-3 text-sm font-bold hover:bg-emerald-50 transition-colors">Upload Watchlist CSV</button>
+                                <button type="submit" class="w-full rounded-xl border border-dranhs-green text-dranhs-green py-3 text-sm font-bold hover:bg-emerald-50 transition-colors">Upload Focus List CSV</button>
                             </form>
                         </div>
                     </div>
@@ -718,9 +743,9 @@ foreach ($g11_rows as $row) {
                 <div class="xl:col-span-2">
                     <div class="rounded-2xl border border-slate-200 overflow-hidden">
                         <div class="px-5 py-4 border-b border-slate-100 bg-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                            <h3 class="text-lg font-heading font-black text-dranhs-dark">Watchlist</h3>
+                            <h3 class="text-lg font-heading font-black text-dranhs-dark">Focus List</h3>
                             <div class="relative w-full sm:w-64">
-                                <input type="text" id="watch-search" placeholder="Search watchlist..." class="w-full bg-slate-50 border border-slate-200 px-3 py-1.5 pl-9 rounded-lg text-sm focus:border-dranhs-green outline-none transition-colors">
+                                <input type="text" id="watch-search" placeholder="Search focus list..." class="w-full bg-slate-50 border border-slate-200 px-3 py-1.5 pl-9 rounded-lg text-sm focus:border-dranhs-green outline-none transition-colors">
                                 <svg class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                             </div>
                         </div>
@@ -738,7 +763,7 @@ foreach ($g11_rows as $row) {
                                 </thead>
                                 <tbody class="divide-y divide-slate-100 bg-white">
                                     <?php if (empty($watch_rows)): ?>
-                                        <tr><td colspan="6" class="px-4 py-6 text-center text-slate-500">No watchlist entries yet.</td></tr>
+                                        <tr><td colspan="6" class="px-4 py-6 text-center text-slate-500">No Focus List entries yet.</td></tr>
                                     <?php else: ?>
                                         <?php foreach ($watch_rows as $index => $row): ?>
                                             <tr class="stem-row">
@@ -802,7 +827,13 @@ function hideG11CompleterModal() {
 }
 
 function renderG11CompleterTable(sectionName) {
-    const rows = LIST_G11_ROWS.filter(row => String(row.section || '') === String(sectionName || ''));
+    const rows = LIST_G11_ROWS.filter(row => {
+        const rowSection = String(row.section || '').trim();
+        if (String(sectionName || '') === 'Unassigned') {
+            return rowSection === '';
+        }
+        return rowSection === String(sectionName || '');
+    });
     g11CompleterModalTitle.textContent = `${sectionName} Completer Table`;
 
     if (rows.length === 0) {
@@ -857,4 +888,34 @@ document.querySelectorAll('.g11-section-card').forEach(card => {
 
 if (closeG11CompleterModal) closeG11CompleterModal.addEventListener('click', hideG11CompleterModal);
 if (g11CompleterBackdrop) g11CompleterBackdrop.addEventListener('click', hideG11CompleterModal);
+
+const stemSearch = document.getElementById('stem-search');
+if (stemSearch) {
+    stemSearch.addEventListener('input', function () {
+        const query = this.value.toLowerCase().trim();
+        document.querySelectorAll('#list-tab-stem tbody tr.stem-row').forEach(row => {
+            row.style.display = row.textContent.toLowerCase().includes(query) ? '' : 'none';
+        });
+    });
+}
+
+const watchSearch = document.getElementById('watch-search');
+if (watchSearch) {
+    watchSearch.addEventListener('input', function () {
+        const query = this.value.toLowerCase().trim();
+        document.querySelectorAll('#list-tab-watch tbody tr.stem-row').forEach(row => {
+            row.style.display = row.textContent.toLowerCase().includes(query) ? '' : 'none';
+        });
+    });
+}
+
+const g11Search = document.getElementById('g11-search');
+if (g11Search) {
+    g11Search.addEventListener('input', function () {
+        const query = this.value.toLowerCase().trim();
+        document.querySelectorAll('#g11-completer-modal-body tbody tr').forEach(row => {
+            row.style.display = row.textContent.toLowerCase().includes(query) ? '' : 'none';
+        });
+    });
+}
 </script>

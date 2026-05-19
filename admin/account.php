@@ -238,8 +238,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         // If adviser role, link to advisers_accounts
                         if ($newRole === 'adviser' && $adviserLink > 0) {
-                            // Ensure user_id column exists
-                            $conn->query("ALTER TABLE advisers_accounts ADD COLUMN IF NOT EXISTS user_id INT NULL");
+                            // Ensure user_id column exists without MySQL 8-only syntax.
+                            $adviser_user_id_check = $conn->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA='" . $conn->real_escape_string(DB_NAME) . "' AND TABLE_NAME='advisers_accounts' AND COLUMN_NAME='user_id'");
+                            if ($adviser_user_id_check && $adviser_user_id_check->num_rows === 0) {
+                                $conn->query("ALTER TABLE advisers_accounts ADD COLUMN user_id INT NULL");
+                            }
                             $lnk = $conn->prepare("UPDATE advisers_accounts SET user_id = ? WHERE id = ?");
                             if ($lnk) { $lnk->bind_param("ii", $newUserId, $adviserLink); $lnk->execute(); $lnk->close(); }
                             $toast_message = 'Adviser account created and linked successfully.';

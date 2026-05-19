@@ -1,11 +1,11 @@
 <?php
 ob_start();
-if (session_status() === PHP_SESSION_NONE) session_start();
+require_once __DIR__ . '/../session.php';
+ems2_session_start();
 require_once __DIR__ . '/../db.php';
 // Check if user is actually logged in — also verify user still exists in DB
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['logged_in']) || $_SESSION['logged_in'] !== true) {
-    header('Location: ../login.php');
-    exit;
+    ems2_login_redirect();
 }
 
 // ── Auto session timeout: 5 minutes of inactivity ────────────────────────────
@@ -14,11 +14,15 @@ if (isset($_SESSION['_last_activity'])) {
     if (time() - $_SESSION['_last_activity'] > SESSION_TIMEOUT) {
         session_unset();
         session_destroy();
-        header('Location: ../login.php?timeout=1');
-        exit;
+        ems2_login_redirect('timeout=1');
     }
 }
 $_SESSION['_last_activity'] = time();
+
+if (isset($_GET['keepalive'])) {
+    http_response_code(204);
+    exit;
+}
 
 // Validate session against DB (prevents stale sessions)
 $_sv_conn = db_connect();
@@ -32,8 +36,7 @@ if (!$_sv_conn->connect_error) {
         $_sv_stmt->close();
         if (!$_sv_result) {
             session_destroy();
-            header('Location: ../login.php');
-            exit;
+            ems2_login_redirect();
         }
         $_SESSION['role'] = $_sv_result['role'];
     }
@@ -378,6 +381,29 @@ $inactiveClasses = 'text-slate-300 hover:bg-slate-800 hover:text-white';
 
     // Start the timer
     resetSessionTimer();
+
+    let _keepAliveTimer;
+    function pingKeepAlive() {
+        fetch('admin.php?keepalive=1', {
+            method: 'GET',
+            credentials: 'same-origin',
+            cache: 'no-store'
+        }).catch(() => {});
+    }
+
+    function scheduleKeepAlive() {
+        clearTimeout(_keepAliveTimer);
+        _keepAliveTimer = setTimeout(() => {
+            pingKeepAlive();
+            scheduleKeepAlive();
+        }, 120000);
+    }
+
+    ['mousemove','keydown','click','scroll','touchstart'].forEach(evt => {
+        document.addEventListener(evt, scheduleKeepAlive, { passive: true });
+    });
+
+    scheduleKeepAlive();
     </script>
 </body>
 </html>

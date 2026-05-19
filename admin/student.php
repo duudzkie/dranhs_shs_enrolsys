@@ -49,6 +49,36 @@ function verify_current_user_password($conn, $user_id, $password) {
 if ($conn->connect_error) {
     $db_error = 'Database connection failed.';
 } else {
+    $student_assigned_section_check = $conn->query(
+        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA='" . $conn->real_escape_string(DB_NAME) . "'
+           AND TABLE_NAME='students'
+           AND COLUMN_NAME='assigned_section'"
+    );
+    if ($student_assigned_section_check && $student_assigned_section_check->num_rows === 0) {
+        $conn->query("ALTER TABLE students ADD COLUMN assigned_section VARCHAR(100)");
+    }
+
+    $encoding_photo_path_check = $conn->query(
+        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA='" . $conn->real_escape_string(DB_NAME) . "'
+           AND TABLE_NAME='encodings'
+           AND COLUMN_NAME='id_photo_path'"
+    );
+    if ($encoding_photo_path_check && $encoding_photo_path_check->num_rows === 0) {
+        $conn->query("ALTER TABLE encodings ADD COLUMN id_photo_path VARCHAR(255) NULL");
+    }
+
+    $encoding_has_photo_check = $conn->query(
+        "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA='" . $conn->real_escape_string(DB_NAME) . "'
+           AND TABLE_NAME='encodings'
+           AND COLUMN_NAME='has_id_photo'"
+    );
+    if ($encoding_has_photo_check && $encoding_has_photo_check->num_rows === 0) {
+        $conn->query("ALTER TABLE encodings ADD COLUMN has_id_photo TINYINT(1) NOT NULL DEFAULT 0");
+    }
+
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         if ($_POST['action'] === 'update_student') {
             $student_id = (int) ($_POST['student_id'] ?? 0);
