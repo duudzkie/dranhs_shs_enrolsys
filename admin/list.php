@@ -350,8 +350,6 @@ if (!$list_conn->connect_error) {
                     $toast_type = 'error';
                 }
             }
-        }
-
         } elseif ($action === 'add_g11_section') {
             $sec_name = trim($_POST['section_name']??'');
             if ($sec_name) {
