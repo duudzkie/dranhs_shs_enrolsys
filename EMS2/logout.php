@@ -1,5 +1,6 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) session_start();
+require_once __DIR__ . '/session.php';
+ems2_session_start();
 
 // Clear session data
 $_SESSION = [];
@@ -14,6 +15,6 @@ if (ini_get('session.use_cookies')) {
 
 session_destroy();
 
-// Redirect back to the main portal
-header('Location: index.php');
-exit;
+// Redirect back to the login page (preserve timeout notice when applicable)
+$query = isset($_GET['timeout']) ? 'timeout=1' : '';
+ems2_login_redirect($query);
